@@ -24,7 +24,7 @@ public struct CursorUsageProvider: UsageProvider {
 
     public func fetchSnapshot() async throws -> UsageSnapshot {
         throw ProviderError.unsupported(
-            reason: "Cursor does not expose usage outside its own app"
+            reason: "Not exposed outside Cursor"
         )
     }
 }

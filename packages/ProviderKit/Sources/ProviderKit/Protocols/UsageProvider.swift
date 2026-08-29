@@ -21,6 +21,10 @@ public enum ProviderError: Error, Equatable, Sendable {
     case unknown(detail: String)
 
     /// Short phrasing for the UI. Must never include credentials or raw responses.
+    ///
+    /// Terse on purpose: this is rendered in a snippet the width of the camera housing —
+    /// 185pt — where anything longer truncates mid-word. The full reasoning for each
+    /// unsupported provider lives in its adapter's documentation, not in the string.
     public var userFacingDescription: String {
         switch self {
         case .notInstalled: "Not installed"

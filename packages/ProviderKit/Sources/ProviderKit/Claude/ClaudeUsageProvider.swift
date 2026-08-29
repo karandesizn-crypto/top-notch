@@ -30,7 +30,7 @@ public struct ClaudeUsageProvider: UsageProvider {
 
     public func fetchSnapshot() async throws -> UsageSnapshot {
         throw ProviderError.unsupported(
-            reason: "Claude has no supported live usage interface yet"
+            reason: "No local usage API yet"
         )
     }
 }

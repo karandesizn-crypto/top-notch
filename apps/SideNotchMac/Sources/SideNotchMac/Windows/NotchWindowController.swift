@@ -21,6 +21,9 @@ final class NotchWindowController {
     /// Opens settings so another tool can be added; wired by the app delegate.
     var onAddProvider: (() -> Void)?
 
+    /// Extra margin around the drawn surface for hit testing.
+    private static let hitSlop: CGFloat = 7
+
     init(store: UsageStore, settings: AppSettings, placement: DisplayPlacementService) {
         self.store = store
         self.settings = settings
@@ -70,7 +73,11 @@ final class NotchWindowController {
                 width: size.width,
                 height: size.height
             )
-            return [band, drawn]
+            // A margin around the drawn surface, so small states stay catchable. Without
+            // it the mini-notch's hit area is its own 5pt height, which is far too fine to
+            // aim at — SwiftUI's own forgiving hit shape never gets a chance, because this
+            // rect gates whether the window sees the event at all.
+            return [band, drawn.insetBy(dx: -Self.hitSlop, dy: -Self.hitSlop)]
         }
 
         window.contentView = container

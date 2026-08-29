@@ -21,7 +21,7 @@ public struct CustomUsageProvider: UsageProvider {
 
     public func fetchSnapshot() async throws -> UsageSnapshot {
         throw ProviderError.unsupported(
-            reason: "\(displayName) has no usage interface SideNotch can read"
+            reason: "No usage interface"
         )
     }
 }
