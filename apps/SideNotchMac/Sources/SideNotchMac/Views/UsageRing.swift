@@ -1,5 +1,6 @@
 import SwiftUI
 import SideNotchCore
+import UsageKit
 
 /// Reusable provider ring: a glyph inside a dark disc, ringed by a usage arc, with the
 /// percentage beneath.

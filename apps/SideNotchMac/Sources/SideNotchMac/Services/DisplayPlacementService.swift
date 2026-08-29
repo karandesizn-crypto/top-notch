@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import SideNotchCore
 import ProviderKit
+import NotchKit
 
 /// Resolves which display the notch surface belongs on, and republishes its metrics
 /// whenever the display environment changes.

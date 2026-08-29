@@ -8,7 +8,7 @@ public enum AppearanceMode: String, CaseIterable, Codable, Sendable, Identifiabl
     case system, dark, light
     public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .system: "System"
         case .dark: "Dark"
@@ -16,7 +16,7 @@ public enum AppearanceMode: String, CaseIterable, Codable, Sendable, Identifiabl
         }
     }
 
-    var nsAppearance: NSAppearance? {
+    public var nsAppearance: NSAppearance? {
         switch self {
         case .system: nil
         case .dark: NSAppearance(named: .darkAqua)
@@ -26,12 +26,12 @@ public enum AppearanceMode: String, CaseIterable, Codable, Sendable, Identifiabl
 }
 
 /// A provider the user added by hand.
-struct CustomProviderDefinition: Codable, Identifiable, Hashable, Sendable {
+public struct CustomProviderDefinition: Codable, Identifiable, Hashable, Sendable {
     /// `ProviderType.rawValue`.
-    let id: String
-    var name: String
+    public let id: String
+    public var name: String
 
-    var providerType: ProviderType { ProviderType(id) }
+    public var providerType: ProviderType { ProviderType(id) }
 }
 
 /// User preferences, persisted to `UserDefaults`.
@@ -40,50 +40,50 @@ struct CustomProviderDefinition: Codable, Identifiable, Hashable, Sendable {
 /// none is a secret. SwiftData holds the snapshot cache, where the record shape matters.
 @Observable
 @MainActor
-final class AppSettings {
+public final class AppSettings {
     /// Refresh bounds. The floor exists because each refresh is a round trip to a local
     /// process the user is also using; polling it hard would be rude.
-    static let minimumRefreshInterval: TimeInterval = 30
-    static let maximumRefreshInterval: TimeInterval = 3600
+    public static let minimumRefreshInterval: TimeInterval = 30
+    public static let maximumRefreshInterval: TimeInterval = 3600
     /// Cap on the row, so the tab cannot grow wider than the display it hangs from.
-    static let maximumProviders = 6
+    public static let maximumProviders = 6
 
-    var enabledProviders: Set<ProviderType> {
+    public var enabledProviders: Set<ProviderType> {
         didSet { store(enabledProviders.map(\.rawValue), .enabledProviders) }
     }
-    var customProviders: [CustomProviderDefinition] {
+    public var customProviders: [CustomProviderDefinition] {
         didSet { storeCustomProviders() }
     }
-    var launchAtLogin: Bool { didSet { store(launchAtLogin, .launchAtLogin) } }
-    var refreshInterval: TimeInterval {
+    public var launchAtLogin: Bool { didSet { store(launchAtLogin, .launchAtLogin) } }
+    public var refreshInterval: TimeInterval {
         didSet {
             refreshInterval = min(max(refreshInterval, Self.minimumRefreshInterval),
                                  Self.maximumRefreshInterval)
             store(refreshInterval, .refreshInterval)
         }
     }
-    var showPercentages: Bool { didSet { store(showPercentages, .showPercentages) } }
-    var showResetCountdown: Bool { didSet { store(showResetCountdown, .showResetCountdown) } }
+    public var showPercentages: Bool { didSet { store(showPercentages, .showPercentages) } }
+    public var showResetCountdown: Bool { didSet { store(showResetCountdown, .showResetCountdown) } }
     /// Stored as percentages for legibility in defaults; exposed as fractions.
-    var warningThreshold: Double { didSet { store(warningThreshold, .warningThreshold) } }
-    var criticalThreshold: Double { didSet { store(criticalThreshold, .criticalThreshold) } }
-    var notificationsEnabled: Bool { didSet { store(notificationsEnabled, .notificationsEnabled) } }
-    var appearance: AppearanceMode { didSet { store(appearance.rawValue, .appearance) } }
+    public var warningThreshold: Double { didSet { store(warningThreshold, .warningThreshold) } }
+    public var criticalThreshold: Double { didSet { store(criticalThreshold, .criticalThreshold) } }
+    public var notificationsEnabled: Bool { didSet { store(notificationsEnabled, .notificationsEnabled) } }
+    public var appearance: AppearanceMode { didSet { store(appearance.rawValue, .appearance) } }
     /// Show the surface on displays with no camera housing.
     ///
     /// Off by default: with nothing to attach to, the surface floats over whatever window
     /// sits at the top edge. On by choice for Macs that have no notch at all, where it is
     /// the only way to see the surface.
-    var showsWithoutNotch: Bool {
+    public var showsWithoutNotch: Bool {
         didSet { store(showsWithoutNotch, .showsWithoutNotch) }
     }
 
-    var thresholds: UsageThresholds {
+    public var thresholds: UsageThresholds {
         UsageThresholds(warning: warningThreshold / 100, critical: criticalThreshold / 100)
     }
 
     /// Every provider that could appear, built-ins first then the user's own.
-    var allProviders: [ProviderType] {
+    public var allProviders: [ProviderType] {
         ProviderType.builtIn + customProviders.map(\.providerType)
     }
 
@@ -95,7 +95,7 @@ final class AppSettings {
         case notificationsEnabled, appearance, showsWithoutNotch
     }
 
-    init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
         if let raw = defaults.data(forKey: Key.customProviders.rawValue),
@@ -131,20 +131,20 @@ final class AppSettings {
         showsWithoutNotch = defaults.object(forKey: Key.showsWithoutNotch.rawValue) as? Bool ?? false
     }
 
-    func isEnabled(_ provider: ProviderType) -> Bool { enabledProviders.contains(provider) }
+    public func isEnabled(_ provider: ProviderType) -> Bool { enabledProviders.contains(provider) }
 
-    func setEnabled(_ enabled: Bool, for provider: ProviderType) {
+    public func setEnabled(_ enabled: Bool, for provider: ProviderType) {
         if enabled { enabledProviders.insert(provider) } else { enabledProviders.remove(provider) }
     }
 
-    func displayName(for provider: ProviderType) -> String {
+    public func displayName(for provider: ProviderType) -> String {
         customProviders.first { $0.id == provider.rawValue }?.name
             ?? provider.defaultDisplayName
     }
 
     /// Adds a provider by title. Returns nil when the title is empty or already taken.
     @discardableResult
-    func addCustomProvider(named title: String) -> ProviderType? {
+    public func addCustomProvider(named title: String) -> ProviderType? {
         let slug = ProviderType.slug(from: title)
         guard !slug.isEmpty else { return nil }
         let id = ProviderType(slug)
@@ -156,16 +156,16 @@ final class AppSettings {
         return id
     }
 
-    func removeCustomProvider(_ provider: ProviderType) {
+    public func removeCustomProvider(_ provider: ProviderType) {
         customProviders.removeAll { $0.id == provider.rawValue }
         enabledProviders.remove(provider)
     }
 
     /// Whether another provider can be shown without the tab outgrowing the display.
-    var canAddProvider: Bool { allProviders.count < Self.maximumProviders }
+    public var canAddProvider: Bool { allProviders.count < Self.maximumProviders }
 
     /// Keeps critical at or above warning, so the two can never invert.
-    func normalizeThresholds() {
+    public func normalizeThresholds() {
         if criticalThreshold < warningThreshold { criticalThreshold = warningThreshold }
     }
 

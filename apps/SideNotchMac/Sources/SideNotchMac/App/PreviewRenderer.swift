@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import SideNotchCore
+import NotchKit
+import UsageKit
 
 /// Renders the notch surface offscreen to a PNG.
 ///

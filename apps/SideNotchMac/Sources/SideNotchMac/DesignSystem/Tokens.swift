@@ -1,5 +1,6 @@
 import SwiftUI
 import SideNotchCore
+import UsageKit
 
 /// Design tokens for the notch surface.
 ///

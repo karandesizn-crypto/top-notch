@@ -9,18 +9,18 @@ import ProviderKit
 /// `UsageLevel`: several distinct statuses share one visual treatment. `.unsupported`,
 /// `.unavailable` and `.error` all render inert — what tells them apart is the message,
 /// not the colour.
-enum ProviderDisplayState: String, Sendable {
+public enum ProviderDisplayState: String, Sendable {
     case normal, warning, critical, exhausted, unavailable, loading
 
     /// Whether figures should be drawn.
-    var hasMeasurement: Bool {
+    public var hasMeasurement: Bool {
         switch self {
         case .normal, .warning, .critical, .exhausted: true
         case .unavailable, .loading: false
         }
     }
 
-    init(status: UsageStatus, level: UsageLevel?) {
+    public init(status: UsageStatus, level: UsageLevel?) {
         switch status {
         case .loading:
             self = .loading
@@ -39,27 +39,27 @@ enum ProviderDisplayState: String, Sendable {
 }
 
 /// What the UI knows about one provider.
-struct ProviderStatus: Identifiable, Sendable {
-    let provider: ProviderType
-    let displayName: String
+public struct ProviderStatus: Identifiable, Sendable {
+    public let provider: ProviderType
+    public let displayName: String
     /// The last state received, whatever its status or source.
-    var usage: UsageState
-    var isRefreshing: Bool
+    public var usage: UsageState
+    public var isRefreshing: Bool
 
-    var id: ProviderType { provider }
+    public var id: ProviderType { provider }
 
-    var state: ProviderDisplayState {
+    public var state: ProviderDisplayState {
         ProviderDisplayState(status: usage.status, level: usage.level)
     }
 
-    var headlineWindow: UsageWindow? { usage.headlineWindow }
+    public var headlineWindow: UsageWindow? { usage.headlineWindow }
 
     /// Where the figures came from, so the UI never has to infer it.
-    var source: UsageSource { usage.source }
-    var status: UsageStatus { usage.status }
+    public var source: UsageSource { usage.source }
+    public var status: UsageStatus { usage.status }
 
     /// One-line explanation for the expanded view.
-    var statusMessage: String? {
+    public var statusMessage: String? {
         if let failure = usage.failure { return failure }
         if usage.status == .available && usage.windows.isEmpty {
             return "No metered limits on this plan"
@@ -75,42 +75,51 @@ struct ProviderStatus: Identifiable, Sendable {
 /// happens off it and only the result is published.
 @Observable
 @MainActor
-final class UsageManager {
-    private(set) var statuses: [ProviderType: ProviderStatus] = [:]
-    private(set) var lastRefresh: Date?
+public final class UsageManager {
+    public private(set) var statuses: [ProviderType: ProviderStatus] = [:]
+    public private(set) var lastRefresh: Date?
     /// Ticks so countdowns re-render without re-reading providers.
-    private(set) var now: Date = Date()
+    public private(set) var now: Date = Date()
 
     /// Presentation order: the built-ins, then whatever the user added. Fixed, so chips
     /// never reshuffle under the pointer as readings arrive.
-    private(set) var order: [ProviderType] = []
+    public private(set) var order: [ProviderType] = []
 
-    let staleness = StalenessPolicy.default
+    public let staleness = StalenessPolicy.default
 
     /// Shortest time a refresh is allowed to appear to take: one full turn of the sweep.
     ///
     /// A local read can return in milliseconds, which would make the ring's sweep a flash.
     /// Matching the sweep's own period means it completes a revolution. This delays only
     /// the indicator; figures are published the moment they arrive.
-    static let minimumVisibleRefresh: Duration = .milliseconds(1300)
+    public static let minimumVisibleRefresh: Duration = .milliseconds(1300)
+
+    /// The hold this instance applies. Injectable so tests are not slowed by a constant
+    /// that exists purely for how an animation reads.
+    private let indicatorHold: Duration
 
     private let settings: AppSettings
-    private let cache: UsageCache
+    private let cache: any UsageCaching
     private let notifications: NotificationService
     private var providers: [ProviderType: any UsageProvider] = [:]
+    private let registry: ProviderRegistry
     private var inFlight: Set<ProviderType> = []
     private let refreshTrigger = RefreshTrigger()
     private var scheduler: RefreshScheduler?
 
-    init(
+    public init(
         settings: AppSettings,
-        cache: UsageCache,
+        cache: any UsageCaching,
         notifications: NotificationService,
+        registry: ProviderRegistry = .standard,
+        indicatorHold: Duration = UsageManager.minimumVisibleRefresh,
         providerOverride: [any UsageProvider]? = nil
     ) {
+        self.indicatorHold = indicatorHold
         self.settings = settings
         self.cache = cache
         self.notifications = notifications
+        self.registry = registry
 
         let built = providerOverride ?? Self.makeProviders(settings: settings, trigger: refreshTrigger)
         for provider in built { providers[provider.providerType] = provider }
@@ -153,7 +162,7 @@ final class UsageManager {
 
     // MARK: Lifecycle
 
-    func start() async {
+    public func start() async {
         guard scheduler == nil else { return }
         for provider in providers.values { await provider.startMonitoring() }
 
@@ -166,7 +175,7 @@ final class UsageManager {
         scheduler.start()
     }
 
-    func stop() async {
+    public func stop() async {
         scheduler?.stop()
         scheduler = nil
         for provider in providers.values { await provider.stopMonitoring() }
@@ -175,7 +184,7 @@ final class UsageManager {
     /// Rebuilds the provider list after the user adds or removes one.
     ///
     /// Existing readings are kept, so adding a provider does not blank what is on screen.
-    func rebuildProviders() async {
+    public func rebuildProviders() async {
         for provider in providers.values where !ProviderType.builtIn.contains(provider.providerType) {
             await provider.stopMonitoring()
         }
@@ -202,7 +211,7 @@ final class UsageManager {
 
     // MARK: Refreshing
 
-    func refreshAll() async {
+    public func refreshAll() async {
         await withTaskGroup(of: Void.self) { group in
             for id in order where settings.isEnabled(id) {
                 group.addTask { [weak self] in await self?.refresh(id) }
@@ -216,7 +225,7 @@ final class UsageManager {
     ///
     /// The stagger is the point: all the rings animate, but as a cascade rather than in
     /// unison, which reads as the surface responding rather than as a glitch.
-    func refreshAllStaggered(step: Duration = .milliseconds(90)) async {
+    public func refreshAllStaggered(step: Duration = .milliseconds(90)) async {
         await withTaskGroup(of: Void.self) { group in
             for (index, id) in visibleProviders.enumerated() {
                 group.addTask { [weak self] in
@@ -228,7 +237,7 @@ final class UsageManager {
     }
 
     /// Refreshes one provider. Safe to call concurrently; duplicates are dropped.
-    func refresh(_ id: ProviderType) async {
+    public func refresh(_ id: ProviderType) async {
         guard let provider = providers[id], !inFlight.contains(id) else { return }
         inFlight.insert(id)
         statuses[id]?.isRefreshing = true
@@ -255,8 +264,8 @@ final class UsageManager {
         // Hold the indicator long enough to be seen, without delaying the data — the
         // figures above are already published by this point.
         let elapsed = ContinuousClock.now - started
-        if elapsed < Self.minimumVisibleRefresh {
-            try? await Task.sleep(for: Self.minimumVisibleRefresh - elapsed)
+        if elapsed < indicatorHold {
+            try? await Task.sleep(for: indicatorHold - elapsed)
         }
     }
 
@@ -293,14 +302,14 @@ final class UsageManager {
 
     // MARK: Queries
 
-    var visibleProviders: [ProviderType] {
+    public var visibleProviders: [ProviderType] {
         order.filter { settings.isEnabled($0) && statuses[$0] != nil }
     }
 
-    func status(for id: ProviderType) -> ProviderStatus? { statuses[id] }
+    public func status(for id: ProviderType) -> ProviderStatus? { statuses[id] }
 
     /// Whether a reading is old enough to mark. Only meaningful for figures that exist.
-    func isStale(_ id: ProviderType) -> Bool {
+    public func isStale(_ id: ProviderType) -> Bool {
         guard let usage = statuses[id]?.usage, usage.status == .available else { return false }
         return staleness.isStale(usage, now: now)
     }
@@ -311,14 +320,14 @@ final class UsageManager {
 /// Providers are constructed inside the manager's initializer, so they cannot capture
 /// `self`. A push arriving in that window is dropped, which is correct — the launch
 /// refresh is moments away.
-final class RefreshTrigger: @unchecked Sendable {
+public final class RefreshTrigger: @unchecked Sendable {
     private let lock = NSLock()
     private var _handler: (@Sendable () async -> Void)?
 
-    var handler: (@Sendable () async -> Void)? {
+    public var handler: (@Sendable () async -> Void)? {
         get { lock.withLock { _handler } }
         set { lock.withLock { _handler = newValue } }
     }
 
-    func fire() async { await handler?() }
+    public func fire() async { await handler?() }
 }

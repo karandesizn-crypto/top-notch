@@ -7,15 +7,15 @@ import ProviderKit
 /// `SMAppService.mainApp` requires a real app bundle with a bundle identifier; a bare
 /// executable run via `swift run` cannot register. Rather than failing loudly, this reports
 /// itself unsupported so the settings UI can explain why the toggle does nothing.
-enum LaunchAtLogin {
-    static var isSupported: Bool { Bundle.main.bundleIdentifier != nil }
+public enum LaunchAtLogin {
+    public static var isSupported: Bool { Bundle.main.bundleIdentifier != nil }
 
-    static var isEnabled: Bool {
+    public static var isEnabled: Bool {
         guard isSupported else { return false }
         return SMAppService.mainApp.status == .enabled
     }
 
-    static func set(_ enabled: Bool) {
+    public static func set(_ enabled: Bool) {
         guard isSupported else {
             Log.app.notice("launch at login unavailable: not running from a bundle")
             return

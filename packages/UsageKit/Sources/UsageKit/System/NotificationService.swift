@@ -14,14 +14,16 @@ import SideNotchCore
 ///    `UNUserNotificationCenter` requires a bundle identifier and traps without one, so a
 ///    plain `swift run` must not reach it.
 @MainActor
-final class NotificationService {
+public final class NotificationService {
+    public init() {}
+
     /// Highest state already announced for each window, keyed provider + window.
     private var announced: [String: UsageLevel] = [:]
     private var isAuthorized = false
 
-    static var isAvailable: Bool { Bundle.main.bundleIdentifier != nil }
+    public static var isAvailable: Bool { Bundle.main.bundleIdentifier != nil }
 
-    func requestAuthorization() async {
+    public func requestAuthorization() async {
         guard Self.isAvailable else {
             Log.app.notice("notifications unavailable: app is not running from a bundle")
             return
@@ -40,7 +42,7 @@ final class NotificationService {
     ///
     /// Only ever called with an `.available` state, so a provider that cannot be read
     /// never produces an alert — and a window with no measurement cannot escalate.
-    func evaluate(_ usage: UsageState, displayName: String, enabled: Bool) {
+    public func evaluate(_ usage: UsageState, displayName: String, enabled: Bool) {
         guard enabled, isAuthorized, Self.isAvailable, usage.status == .available else { return }
 
         for window in usage.windows {
@@ -88,5 +90,5 @@ final class NotificationService {
     }
 
     /// Clears announcement state, e.g. when the user changes thresholds.
-    func reset() { announced.removeAll() }
+    public func reset() { announced.removeAll() }
 }

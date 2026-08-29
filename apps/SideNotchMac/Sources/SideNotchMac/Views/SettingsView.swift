@@ -1,6 +1,7 @@
 import SwiftUI
 import SideNotchCore
 import ProviderKit
+import UsageKit
 
 /// The settings window.
 struct SettingsView: View {

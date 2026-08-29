@@ -1,5 +1,6 @@
 import Foundation
 import SideNotchCore
+import NotchKit
 
 /// Resolves the surface's current size.
 ///

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SideNotchCore
 import ProviderKit
+import UsageKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -23,10 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications = NotificationService()
 
         let usingMocks = ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1"
-        // Fixture runs get an in-memory cache. Sharing the real one let a mock render write
-        // figures that then outlived it, because a provider whose fetch fails keeps
+        // Fixture runs get an in-memory cache. Sharing the real one let a mock render
+        // write figures that then outlived it, because a provider whose fetch fails keeps
         // whatever the cache last held.
-        let cache = UsageCache(inMemory: usingMocks)
+        let cache: any UsageCaching = usingMocks ? InMemoryUsageCache() : FileUsageCache()
 
         let providerOverride: [any UsageProvider]? =
             usingMocks ? MockUsageProvider.showcase() : nil

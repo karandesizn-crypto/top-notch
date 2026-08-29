@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 import SideNotchCore
 import ProviderKit
+import NotchKit
+import UsageKit
 
 /// Owns the notch window: sizes it from the display's measured housing, keeps it pinned to
 /// the top-centre of the active display, and follows every change that can invalidate that.

@@ -7,11 +7,13 @@ let package = Package(
     dependencies: [
         .package(path: "../../packages/SideNotchCore"),
         .package(path: "../../packages/ProviderKit"),
+        .package(path: "../../packages/NotchKit"),
+        .package(path: "../../packages/UsageKit"),
     ],
     targets: [
         .executableTarget(
             name: "SideNotchMac",
-            dependencies: ["SideNotchCore", "ProviderKit"],
+            dependencies: ["SideNotchCore", "ProviderKit", "NotchKit", "UsageKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

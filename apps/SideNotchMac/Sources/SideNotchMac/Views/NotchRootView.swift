@@ -2,6 +2,8 @@ import SwiftUI
 import Observation
 import SideNotchCore
 import ProviderKit
+import NotchKit
+import UsageKit
 
 /// Presentation state of the surface.
 @Observable

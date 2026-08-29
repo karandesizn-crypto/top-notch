@@ -7,10 +7,10 @@ import ProviderKit
 /// extended with the rest of the lifecycle — without touching provider code. The scheduler
 /// calls back; whoever owns the providers does the fetching.
 @MainActor
-final class RefreshScheduler {
+public final class RefreshScheduler {
     /// Why a refresh is happening. Recorded so the manager can treat a user-initiated
     /// refresh differently from a background one if it ever needs to.
-    enum Trigger: String {
+    public enum Trigger: String {
         case launch
         case manual
         case expansion
@@ -31,7 +31,7 @@ final class RefreshScheduler {
     /// a burst of triggers cannot pile up into overlapping reads.
     private var isRefreshing = false
 
-    init(
+    public init(
         interval: @escaping @MainActor () -> TimeInterval,
         tick: @escaping @MainActor () -> Void,
         perform: @escaping @MainActor (Trigger) async -> Void
@@ -42,7 +42,7 @@ final class RefreshScheduler {
     }
 
     /// Starts the periodic loop and performs the launch refresh.
-    func start() {
+    public func start() {
         guard periodicTask == nil else { return }
 
         periodicTask = Task { [weak self] in
@@ -64,7 +64,7 @@ final class RefreshScheduler {
         }
     }
 
-    func stop() {
+    public func stop() {
         periodicTask?.cancel(); periodicTask = nil
         tickTask?.cancel(); tickTask = nil
     }
@@ -73,7 +73,7 @@ final class RefreshScheduler {
     ///
     /// Coalescing here rather than in the manager means every trigger — launch, a click,
     /// a provider event — gets the same protection without each remembering to ask.
-    func request(_ trigger: Trigger) async {
+    public func request(_ trigger: Trigger) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
