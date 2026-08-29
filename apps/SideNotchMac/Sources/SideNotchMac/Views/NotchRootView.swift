@@ -33,12 +33,15 @@ struct NotchRootView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Runs the sweep on every ring while true, without re-reading anything.
+    /// The one ring currently sweeping because the pointer is on it.
     ///
-    /// Hovering is passive and constant; performing a real refresh on it would hammer the
-    /// providers' local interfaces. So a hover plays the animation only — a click is what
-    /// actually re-reads.
-    @State private var isHoverSweeping = false
+    /// Only that ring animates — hovering is a pointer-by-pointer gesture, and sweeping all
+    /// of them would say something the hover did not mean. A click is what animates the
+    /// whole row, because a click really does re-read all of them.
+    ///
+    /// The sweep is animation only. Hovering is passive and constant, and performing a real
+    /// refresh on it would hammer the providers' local interfaces for no benefit.
+    @State private var hoverSweepProvider: ProviderID?
     @State private var hoverSweepTask: Task<Void, Never>?
 
     private var expanded: Bool { surface.isExpanded }
@@ -212,8 +215,9 @@ struct NotchRootView: View {
                     diameter: Tokens.Ring.chipDiameter,
                     lineWidth: Tokens.Ring.chipLineWidth,
                     glyphSize: Tokens.Ring.chipGlyph,
-                    // A real read, or the hover animation — the ring draws them the same.
-                    isRefreshing: (providerStatus?.isRefreshing ?? false) || isHoverSweeping
+                    // A real read, or this ring's hover sweep — drawn identically.
+                    isRefreshing: (providerStatus?.isRefreshing ?? false)
+                        || hoverSweepProvider == provider
                 )
                 if settings.showPercentages {
                     Text(caption(for: providerStatus))
@@ -244,7 +248,7 @@ struct NotchRootView: View {
                 surface.selected = provider
                 surface.isExpanded = true
             }
-            startHoverSweep()
+            startHoverSweep(provider)
         }
         .accessibilityLabel(label(for: providerStatus))
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
@@ -351,17 +355,18 @@ struct NotchRootView: View {
         return "\(Int(percentage.rounded()))%"
     }
 
-    /// Sweeps every ring for one turn.
+    /// Sweeps one ring for a turn.
     ///
-    /// Ignored while a sweep is already running, so moving along the row does not restart
-    /// it on each chip — the animation stays one continuous turn rather than stuttering.
-    private func startHoverSweep() {
-        guard !isHoverSweeping, !reduceMotion else { return }
-        isHoverSweeping = true
+    /// Re-entering the same ring while it is already sweeping is ignored, so resting the
+    /// pointer does not restart it. Moving to a different ring hands the sweep over.
+    private func startHoverSweep(_ provider: ProviderID) {
+        guard !reduceMotion, hoverSweepProvider != provider else { return }
+        hoverSweepProvider = provider
         hoverSweepTask?.cancel()
         hoverSweepTask = Task {
             try? await Task.sleep(for: UsageStore.minimumVisibleRefresh)
-            isHoverSweeping = false
+            guard !Task.isCancelled else { return }
+            if hoverSweepProvider == provider { hoverSweepProvider = nil }
         }
     }
 
