@@ -277,38 +277,47 @@ struct NotchSurfaceLayoutTests {
     /// Three tools on the measured 185x32 housing.
     let three = NotchSurfaceLayout(providerCount: 3, notchWidth: 185, housingRowHeight: 32)
 
-    @Test("the surface is the housing band plus one continuous provider row")
-    func collapsedSize() {
-        // 3 x 64 chips + 40 add button + 24 padding + 24 flare.
-        #expect(three.collapsedSize.width == 280)
-        // The housing band stays empty; the row sits beneath it.
-        #expect(three.collapsedSize.height == 94)   // 32 + 62
+    @Test("the collapsed surface is exactly the width of the housing")
+    func matchesNotchWidth() {
+        // The whole point: it reads as the notch, not a bar poking out either side.
+        #expect(three.collapsedSize.width == 185)
+        #expect(three.collapsedSize.height == 78)   // 32 housing + 46 row
     }
 
-    @Test("the row is continuous: no width is reserved for the housing")
-    func rowIsContinuous() {
-        // Content is laid out below the camera, so the housing costs no horizontal space.
-        let noHousing = NotchSurfaceLayout(
-            providerCount: 3, notchWidth: 0, housingRowHeight: 32
-        )
-        #expect(noHousing.contentWidth == three.contentWidth)
+    @Test("chips divide the housing's width between them")
+    func chipsShareTheWidth() {
+        // Four items: three rings and the add button.
+        #expect(three.itemCount == 4)
+        #expect(three.contentWidth == 145)          // 185 - 24 flare - 16 padding
+        #expect(three.chipWidth == 145.0 / 4)
+        #expect(three.chipWidth >= three.minimumChipWidth)
     }
 
-    @Test("the surface is never narrower than the housing it merges with")
-    func neverNarrowerThanHousing() {
-        // One provider's content is slim; the housing would otherwise poke out either side.
-        let one = NotchSurfaceLayout(providerCount: 1, notchWidth: 185, housingRowHeight: 32)
-        #expect(one.contentWidth + 24 < 185 + 24)
-        #expect(one.collapsedSize.width == 209)     // 185 + 24 flare
+    @Test("enough tools eventually widen the surface rather than squeezing the chips")
+    func legibilityWinsEventually() {
+        // Six tools plus the add button cannot fit in 185pt at a legible size.
+        let many = NotchSurfaceLayout(providerCount: 6, notchWidth: 185, housingRowHeight: 32)
+        #expect(many.collapsedSize.width > 185)
+        #expect(many.chipWidth >= many.minimumChipWidth)
     }
 
-    @Test("hiding the add button reclaims its width")
-    func addButtonWidth() {
-        let without = NotchSurfaceLayout(
-            providerCount: 3, notchWidth: 185, housingRowHeight: 32, showsAddButton: false
-        )
-        #expect(three.collapsedSize.width - without.collapsedSize.width == 40)
-        #expect(without.itemWidths.count == 3)
+    @Test("minimized is the housing band alone")
+    func minimized() {
+        // Nothing below the housing row, which has no pixels: the screen is unobstructed.
+        #expect(three.minimizedSize.height == 32)
+        #expect(three.minimizedSize.width == 185)
+        #expect(three.minimizedSize.height < three.collapsedSize.height)
+    }
+
+    @Test("state selection covers all three forms")
+    func sizeForState() {
+        #expect(three.size(expanded: false, minimized: true, rowCount: 1) == three.minimizedSize)
+        #expect(three.size(expanded: false, minimized: false, rowCount: 1) == three.collapsedSize)
+        #expect(three.size(expanded: true, minimized: false, rowCount: 1)
+                == three.expandedSize(rowCount: 1))
+        // Minimized wins over expanded: tucking away must not be overridden by a stale
+        // hover state.
+        #expect(three.size(expanded: true, minimized: true, rowCount: 1) == three.minimizedSize)
     }
 
     @Test("expanding grows downward from the same top edge")
@@ -316,7 +325,6 @@ struct NotchSurfaceLayoutTests {
         let expanded = three.expandedSize(rowCount: 2)
         #expect(expanded.height > three.collapsedSize.height)
         #expect(expanded.height == three.collapsedHeight + three.expandedBodyHeight(rowCount: 2))
-        // Never narrower than collapsed, so expanding cannot pinch the surface in.
         #expect(expanded.width >= three.collapsedSize.width)
     }
 
@@ -333,26 +341,20 @@ struct NotchSurfaceLayoutTests {
         #expect(three.expandedBodyHeight(rowCount: 0) == three.expandedBodyHeight(rowCount: 1))
     }
 
-    @Test("the window fits every reachable state, so expanding never resizes it")
+    @Test("the window fits every reachable state, so changing state never resizes it")
     func windowSize() {
         for count in 1...6 {
             let layout = NotchSurfaceLayout(
                 providerCount: count, notchWidth: 185, housingRowHeight: 32
             )
             #expect(layout.windowSize.width >= layout.collapsedSize.width)
+            #expect(layout.windowSize.height >= layout.minimizedSize.height)
             for rows in 0...NotchSurfaceLayout.maximumRows {
                 let size = layout.expandedSize(rowCount: rows)
                 #expect(size.width <= layout.windowSize.width)
                 #expect(size.height <= layout.windowSize.height)
             }
         }
-    }
-
-    @Test("many providers widen the row past the expanded panel")
-    func manyProviders() {
-        let many = NotchSurfaceLayout(providerCount: 6, notchWidth: 185, housingRowHeight: 32)
-        #expect(many.collapsedSize.width > 322)
-        #expect(many.windowSize.width == many.collapsedSize.width)
     }
 }
 

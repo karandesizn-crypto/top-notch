@@ -54,6 +54,7 @@ final class NotchWindowController {
             let size = SurfaceSizing.size(
                 layout: layout,
                 expanded: surface.isExpanded,
+                minimized: surface.isMinimized,
                 status: store.status(for: surface.selected)
             )
             return CGRect(

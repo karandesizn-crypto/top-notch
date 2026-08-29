@@ -18,16 +18,13 @@ enum Tokens {
     }
 
     enum Ring {
-        /// The provider rings, sitting below the housing band where there is room for them.
-        static let chipDiameter: CGFloat = 36
-        static let chipLineWidth: CGFloat = 3
-        static let chipGlyph: CGFloat = 18
-        static let chipWidth: CGFloat = 64
-        static let chipRowHeight: CGFloat = 62
-
-        /// Without figures beneath, the row is shorter and the chips narrower.
-        static let chipWidthRingOnly: CGFloat = 46
-        static let chipRowHeightRingOnly: CGFloat = 46
+        /// The provider rings, sized to fit a row exactly as wide as the camera housing.
+        static let chipDiameter: CGFloat = 26
+        static let chipLineWidth: CGFloat = 2.6
+        static let chipGlyph: CGFloat = 13
+        static let chipRowHeight: CGFloat = 46
+        /// Without figures beneath, the row loses the caption's height.
+        static let chipRowHeightRingOnly: CGFloat = 36
     }
 
     enum Palette {
@@ -65,7 +62,7 @@ enum Tokens {
     }
 
     enum Type_ {
-        static let chipValue = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let chipValue = Font.system(size: 10, weight: .semibold, design: .rounded)
         static let ringCaption = Font.system(size: 11, weight: .bold, design: .rounded)
         static let cardTitle = Font.system(size: 12, weight: .semibold)
         static let rowLabel = Font.system(size: 10.5, weight: .medium)

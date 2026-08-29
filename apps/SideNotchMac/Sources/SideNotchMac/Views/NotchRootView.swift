@@ -8,6 +8,8 @@ import ProviderKit
 @MainActor
 final class NotchSurfaceState {
     var isExpanded = false
+    /// Tucked away to the housing band alone, leaving the screen unobstructed.
+    var isMinimized = false
     /// Set by a click. A pinned surface stays open when the pointer leaves, and is
     /// dismissed by Escape or another click.
     var isPinned = false
@@ -35,8 +37,12 @@ struct NotchRootView: View {
     private var providers: [ProviderID] { store.visibleProviders }
     private var status: ProviderStatus? { store.status(for: surface.selected) }
 
+    private var minimized: Bool { surface.isMinimized }
+
     private var size: CGSize {
-        SurfaceSizing.size(layout: layout, expanded: expanded, status: status)
+        SurfaceSizing.size(
+            layout: layout, expanded: expanded, minimized: minimized, status: status
+        )
     }
 
     private var shape: NotchSurfaceShape {
@@ -57,7 +63,7 @@ struct NotchRootView: View {
     private var content: some View {
         VStack(spacing: 0) {
             chipRow
-            if expanded {
+            if expanded && !minimized {
                 detailCard
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -71,6 +77,7 @@ struct NotchRootView: View {
         }
         .clipShape(shape)
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
+        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: minimized)
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: size.height)
         .onHover { hovering in
             // Leaving the tab collapses it. Entering does not expand on its own: a chip
@@ -118,15 +125,32 @@ struct NotchRootView: View {
     /// The band is empty on purpose: it is the height of the camera, which nothing can be
     /// drawn over. Putting the row below it rather than either side of it is what lets the
     /// providers sit together as one group.
+    ///
+    /// Hovering the band itself tucks the surface away, so a pass of the pointer over the
+    /// notch clears the screen. Toggling on entry rather than continuously means it fires
+    /// once per pass instead of flickering while the pointer rests there.
     private var chipRow: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: layout.housingRowHeight)
-            HStack(spacing: 0) {
-                ForEach(rowItems, id: \.self) { item($0) }
+            Color.clear
+                .frame(height: layout.housingRowHeight)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    guard hovering, !surface.isPinned else { return }
+                    withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
+                        surface.isMinimized.toggle()
+                        if surface.isMinimized { surface.isExpanded = false }
+                    }
+                }
+
+            if !minimized {
+                HStack(spacing: 0) {
+                    ForEach(rowItems, id: \.self) { item($0) }
+                }
+                .frame(height: layout.chipRowHeight)
+                .transition(.opacity)
             }
-            .frame(height: layout.chipRowHeight)
         }
-        .frame(height: layout.collapsedHeight)
+        .frame(height: minimized ? layout.minimizedSize.height : layout.collapsedHeight)
     }
 
     @ViewBuilder
@@ -143,10 +167,8 @@ struct NotchRootView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Tokens.Palette.secondaryText)
                 .frame(width: Tokens.Ring.chipDiameter, height: Tokens.Ring.chipDiameter)
-                .background {
-                    Circle().fill(Color.white.opacity(0.08))
-                }
-                .frame(width: layout.addChipWidth, height: layout.chipRowHeight, alignment: .top)
+                .background { Circle().fill(Color.white.opacity(0.08)) }
+                .frame(width: layout.chipWidth, height: layout.chipRowHeight, alignment: .top)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -182,9 +204,9 @@ struct NotchRootView: View {
             .frame(width: layout.chipWidth, height: layout.chipRowHeight, alignment: .top)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(Color.white.opacity(0.09))
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, 1)
                 }
             }
             .contentShape(Rectangle())
@@ -193,7 +215,7 @@ struct NotchRootView: View {
         .animation(Tokens.Motion.content(reduceMotion: reduceMotion), value: surface.selected)
         // Hovering a chip is what opens the card, and which chip decides what it shows.
         .onHover { hovering in
-            guard hovering, !surface.isPinned else { return }
+            guard hovering, !surface.isPinned, !surface.isMinimized else { return }
             withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
                 surface.selected = provider
                 surface.isExpanded = true

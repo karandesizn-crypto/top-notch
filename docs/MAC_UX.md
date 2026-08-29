@@ -55,20 +55,31 @@ covers is affected.
 One ring per provider, plus a `+` to add another. Nothing else.
 
 ```
-     ╭──────────────────────╮
-     │       camera         │   <- empty band, the housing's height
-     │   ◔     ◔     ◔   +  │
-     │  73%   21%   52%     │
-     ╰──────────────────────╯
+     ╭──────────────────╮
+     │      camera      │   <- empty band, the housing's height
+     │  ◔   ◔   ◔    +  │
+     │ 73%  21%  52%    │
+     ╰──────────────────╯
 ```
 
-**276×94pt** with three tools. The top band is the height of the camera housing and stays
-empty — nothing can be drawn over the camera — so it merges with the notch. Every item sits
-*below* that band, where the display is unobstructed, which is what lets the three providers
-read as one continuous group rather than splitting either side of the camera.
+**Exactly the width of the camera housing** — 185×78pt on the machine this was built
+against. Matching the housing is what makes it read as the notch rather than a bar poking
+out either side of it. The chips divide that width between them; the surface only grows
+past the housing once enough tools are added that the chips would otherwise be squeezed
+below a legible size.
 
-The surface is never narrower than the housing plus its flares, or the notch would show past
-its edges.
+The top band is the housing's height and stays empty, since nothing can be drawn over the
+camera. Every item sits *below* that band, where the display is unobstructed, which is what
+lets the providers read as one continuous group.
+
+### Minimized
+
+Hovering the housing band tucks the surface away to that band alone. The housing row has no
+pixels, so a surface that size covers nothing and every window beneath it stays clickable —
+the way to clear the screen without quitting. Hovering the band again brings it back.
+
+It toggles on entry rather than continuously, so one pass of the pointer fires it once
+instead of flickering while the pointer rests there.
 
 Each provider is drawn with its own mark; see `docs/PROVIDER_MARKS.md`, including how to
 drop in exact brand artwork and the trademark question that needs answering before

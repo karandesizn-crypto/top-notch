@@ -15,10 +15,9 @@ enum SurfaceSizing {
             notchWidth: notch.notchWidth,
             housingRowHeight: notch.notchHeight,
             showsAddButton: showsAddButton,
-            // Without figures the chip is just the ring, so it needs less room.
+            // Without figures the row loses the caption's height.
             chipRowHeight: showsFigures ? Tokens.Ring.chipRowHeight
                                         : Tokens.Ring.chipRowHeightRingOnly,
-            chipWidth: showsFigures ? Tokens.Ring.chipWidth : Tokens.Ring.chipWidthRingOnly,
             flare: Tokens.Surface.flare
         )
     }
@@ -30,8 +29,8 @@ enum SurfaceSizing {
     }
 
     static func size(
-        layout: NotchSurfaceLayout, expanded: Bool, status: ProviderStatus?
+        layout: NotchSurfaceLayout, expanded: Bool, minimized: Bool, status: ProviderStatus?
     ) -> CGSize {
-        layout.size(expanded: expanded, rowCount: rowCount(for: status))
+        layout.size(expanded: expanded, minimized: minimized, rowCount: rowCount(for: status))
     }
 }
