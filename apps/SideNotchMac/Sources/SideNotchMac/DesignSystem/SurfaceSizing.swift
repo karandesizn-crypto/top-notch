@@ -15,8 +15,10 @@ enum SurfaceSizing {
             notchWidth: notch.notchWidth,
             housingRowHeight: notch.notchHeight,
             showsAddButton: showsAddButton,
-            // A figure beside the ring widens every chip, and the strip with it.
-            chipWidth: showsFigures ? Tokens.Ring.chipWidthWithFigure : Tokens.Ring.chipWidth,
+            // A figure beside the ring needs more room per chip, which is what can push the
+            // panel wider than the housing.
+            minimumChipWidth: showsFigures ? Tokens.Ring.minimumChipWidthWithFigure
+                                           : Tokens.Ring.minimumChipWidth,
             flare: Tokens.Surface.flare
         )
     }

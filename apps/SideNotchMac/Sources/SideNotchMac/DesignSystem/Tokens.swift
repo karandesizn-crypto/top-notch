@@ -24,9 +24,10 @@ enum Tokens {
         static let chipDiameter: CGFloat = 21
         static let chipLineWidth: CGFloat = 2.2
         static let chipGlyph: CGFloat = 11
-        /// Chip widths with and without a figure beside the ring.
-        static let chipWidth: CGFloat = 28
-        static let chipWidthWithFigure: CGFloat = 54
+        /// Smallest a chip may be before the panel outgrows the housing, with and without
+        /// a figure beside the ring.
+        static let minimumChipWidth: CGFloat = 34
+        static let minimumChipWidthWithFigure: CGFloat = 58
     }
 
     enum Palette {

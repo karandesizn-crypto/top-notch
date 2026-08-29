@@ -13,9 +13,21 @@ Every dimension of the *anchor* comes from the display, measured at runtime thro
 `NotchPlacement`:
 
 - **Housing width and position** from `NSScreen.auxiliaryTopLeftArea` /
-  `auxiliaryTopRightArea` — the housing is whatever those two areas do not cover. On the
-  machine this was developed against that is 185pt, centred at x=756.
-- **Housing height** from `NSScreen.safeAreaInsets.top` — 32pt, where the menu bar is 22pt.
+  `auxiliaryTopRightArea` — the housing is whatever those two areas do not cover.
+- **Housing height** from `NSScreen.safeAreaInsets.top`, which is taller than the menu bar.
+
+Measured on a 14-inch MacBook Pro (1512x982pt, 3024x1964 native, @2x):
+
+| | points | native pixels |
+|---|---|---|
+| Housing | **185.0 x 32.0** | 370 x 64 |
+| Spans x | 663.5 … 848.5 | |
+| Centre | 756.0 — exactly the screen's midpoint | |
+| Menu bar | 22.0 tall | |
+
+The auxiliary areas report their own height as 32.0, agreeing with the safe-area inset.
+Aspect is 5.78 : 1. None of this is hard-coded: another Mac with a different housing gets a
+panel matching *its* housing, and there is a test for that.
 - **Anchor** at the very top of the display, so the collapsed surface *occupies the notch
   row* rather than hanging below it. Its height matches the housing exactly and its chips
   sit either side of the camera, which is what makes it read as part of the notch.
@@ -52,23 +64,23 @@ covers is affected.
 
 ### Resting
 
-One group of chips, centred directly beneath the camera.
+The panel is **exactly the housing's size** — 185 x 32pt — directly beneath it.
 
 ```
-        ┌──────────┐
-        │  camera  │
-      ╭─┴──────────┴─╮
-      │  ◔  ◔  ◔  +  │   <- 148 x 34pt, narrower than the housing
+      ┌──────────────┐
+      │    camera    │   185 x 32
+      ├──────────────┤
+      │  ◔  ◔  ◔  +  │   185 x 32
       ╰──────────────╯
 ```
 
-The chips sit **together**, not split either side of the camera. They cannot sit *on* it —
-there are no pixels behind the housing — so the group hangs just below, narrower than the
-housing, and merges with it because both are black. That reads as the notch continuing
-downward rather than as a bar of its own.
+Same width, same height, so the whole thing reads as a notch of double height rather than
+as a panel attached to one. The chips sit **together**, not split either side of the camera:
+they cannot sit *on* it, since there are no pixels behind the housing, so they go below.
 
-The group is sized to its chips, so it never reserves width for the camera. Adding a tool
-widens it by one chip.
+The panel divides its width evenly between the chips. It only grows past the housing when
+enough tools are added that the chips would fall below a legible width — past that point,
+legibility wins over the silhouette, and only the width gives; the height stays matched.
 
 ### Hovering a chip
 

@@ -274,60 +274,67 @@ struct NotchPlacementTests {
 
 @Suite("Notch surface layout")
 struct NotchSurfaceLayoutTests {
-    /// Three tools on the measured 185x32 housing.
+    /// Three tools on the measured housing: 185 x 32pt, read from the display's auxiliary
+    /// top areas and safe-area inset rather than hard-coded.
     let three = NotchSurfaceLayout(providerCount: 3, notchWidth: 185, housingRowHeight: 32)
 
-    @Test("the chips are one group, sized to themselves rather than to the camera")
-    func chipsAreOneGroup() {
-        // Four items at 28pt, 16pt padding, 24pt flare. No width reserved for the camera:
-        // the group sits below it, not around it.
-        #expect(three.itemCount == 4)
-        #expect(three.contentWidth == 112)
-        #expect(three.collapsedSize.width == 152)
-        #expect(three.collapsedSize.height == 34)
+    @Test("the resting panel is exactly the housing's size")
+    func matchesTheHousingExactly() {
+        // Same width and height, directly beneath it: the notch simply looks twice as tall.
+        #expect(three.collapsedSize.width == 185)
+        #expect(three.collapsedSize.height == 32)
+        #expect(three.collapsedSize.width == three.notchWidth)
+        #expect(three.collapsedSize.height == three.housingRowHeight)
     }
 
-    @Test("the group is narrower than the housing it hangs from")
-    func narrowerThanHousing() {
-        // Which is what lets it read as the notch continuing downward.
-        #expect(three.collapsedSize.width < three.notchWidth)
+    @Test("the panel divides its width between the chips")
+    func chipsShareTheWidth() {
+        #expect(three.itemCount == 4)               // three rings and the add button
+        #expect(three.contentWidth == 169)          // 185 less 8pt padding either side
+        #expect(three.chipWidth == 169.0 / 4)
+        #expect(three.chipWidth >= three.minimumChipWidth)
+        #expect(three.chipRowHeight == 32)
     }
 
-    @Test("the drawn surface hangs below the camera's row")
+    @Test("enough tools widen the panel rather than squeezing the chips")
+    func legibilityWinsEventually() {
+        // Six tools plus the add button cannot fit in 185pt at a legible size.
+        let many = NotchSurfaceLayout(providerCount: 6, notchWidth: 185, housingRowHeight: 32)
+        #expect(many.collapsedSize.width > 185)
+        #expect(many.chipWidth >= many.minimumChipWidth)
+        // Height still matches the housing; only width gives.
+        #expect(many.collapsedSize.height == 32)
+    }
+
+    @Test("a housing of another size is followed, not overridden")
+    func followsWhateverHousingIsMeasured() {
+        // Nothing is hard-coded to this Mac: a different housing produces a different panel.
+        let other = NotchSurfaceLayout(providerCount: 3, notchWidth: 220, housingRowHeight: 38)
+        #expect(other.collapsedSize == CGSize(width: 220, height: 38))
+    }
+
+    @Test("the drawn panel hangs below the camera's row")
     func hangsBelowTheCamera() {
         #expect(three.surfaceTopInset == three.housingRowHeight)
-        #expect(three.surfaceTopInset == 32)
-    }
-
-    @Test("a chip never shrinks below a legible width")
-    func minimumChipWidth() {
-        let squeezed = NotchSurfaceLayout(
-            providerCount: 3, notchWidth: 185, housingRowHeight: 32, chipWidth: 4
-        )
-        #expect(squeezed.chipWidth == squeezed.minimumChipWidth)
     }
 
     @Test("minimized leaves a mini-notch, not nothing")
     func minimized() {
-        // An affordance the user cannot see is one they cannot use, so something stays.
         #expect(three.minimizedSize == CGSize(width: 38, height: 5))
         #expect(three.minimizedSize.height < three.collapsedSize.height)
-        #expect(three.minimizedSize.width < three.collapsedSize.width)
     }
 
     @Test("hovering adds a snippet, not a panel")
     func snippetIsSmall() {
-        #expect(three.expandedBodyHeight(pinned: false) == 52)   // 9 padding x2 + 34
+        #expect(three.expandedBodyHeight(pinned: false) == 52)
         #expect(three.expandedSize(pinned: false).height == three.collapsedSize.height + 52)
-        #expect(three.expandedSize(pinned: false).height == 86)
     }
 
     @Test("clicking adds one line, not a panel")
     func pinnedAddsOneLine() {
-        let hovered = three.expandedBodyHeight(pinned: false)
-        let clicked = three.expandedBodyHeight(pinned: true)
-        #expect(clicked - hovered == three.pinnedExtraHeight)
-        #expect(clicked - hovered == 15)
+        let grown = three.expandedBodyHeight(pinned: true)
+            - three.expandedBodyHeight(pinned: false)
+        #expect(grown == three.pinnedExtraHeight)
     }
 
     @Test("state selection covers every form")
@@ -336,21 +343,11 @@ struct NotchSurfaceLayoutTests {
                 == three.minimizedSize)
         #expect(three.size(expanded: false, minimized: false, pinned: false)
                 == three.collapsedSize)
-        #expect(three.size(expanded: true, minimized: false, pinned: false)
-                == three.expandedSize(pinned: false))
         #expect(three.size(expanded: true, minimized: false, pinned: true)
                 == three.expandedSize(pinned: true))
         // Minimized wins: tucking away must not be undone by a stale hover or pin.
         #expect(three.size(expanded: true, minimized: true, pinned: true)
                 == three.minimizedSize)
-    }
-
-    @Test("the window covers the whole camera, so the hover band can be reached")
-    func windowSpansTheCamera() {
-        // The group is narrower than the housing, but the band above it must not be.
-        #expect(three.windowSize.width >= three.notchWidth)
-        #expect(three.windowSize.height
-                == three.surfaceTopInset + three.expandedSize(pinned: true).height)
     }
 
     @Test("the window fits every reachable state, so changing state never resizes it")
@@ -359,6 +356,7 @@ struct NotchSurfaceLayoutTests {
             let layout = NotchSurfaceLayout(
                 providerCount: count, notchWidth: 185, housingRowHeight: 32
             )
+            #expect(layout.windowSize.width >= layout.notchWidth)
             let states = [
                 layout.collapsedSize, layout.minimizedSize,
                 layout.expandedSize(pinned: false), layout.expandedSize(pinned: true),

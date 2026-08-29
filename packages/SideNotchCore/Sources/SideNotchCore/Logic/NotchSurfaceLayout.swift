@@ -3,6 +3,11 @@ import CoreGraphics
 
 /// Sizes for the notch surface in each state.
 ///
+/// The panel is **exactly the camera housing's size** — 185 x 32pt on a 14-inch MacBook
+/// Pro, measured from `auxiliaryTopLeftArea`, `auxiliaryTopRightArea` and
+/// `safeAreaInsets.top` rather than hard-coded. Sitting directly beneath the housing at the
+/// same width and height, it reads as the notch simply being twice as tall.
+///
 /// The chips sit together as one group, centred directly beneath the camera.
 ///
 /// They cannot sit *on* the camera — it has no pixels behind it — and splitting them either
@@ -20,11 +25,8 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     ///
     /// Nothing is drawn here; it exists so hovering the notch can tuck the chips away.
     public let housingRowHeight: CGFloat
-    /// Height of the drawn chip row.
-    public let chipRowHeight: CGFloat
-    /// Width of one chip in the resting strip.
-    public let chipWidth: CGFloat
-    /// Smallest a chip may become before the row is allowed to outgrow the housing.
+
+    /// Smallest a chip may become before the panel is allowed to outgrow the housing.
     public let minimumChipWidth: CGFloat
     /// Whether the add button is shown; hidden once the row is full.
     public let showsAddButton: Bool
@@ -47,9 +49,7 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         notchWidth: CGFloat = 0,
         housingRowHeight: CGFloat = 32,
         showsAddButton: Bool = true,
-        chipRowHeight: CGFloat = 34,
-        chipWidth: CGFloat = 28,
-        minimumChipWidth: CGFloat = 24,
+        minimumChipWidth: CGFloat = 34,
         horizontalPadding: CGFloat = 8,
         flare: CGFloat = 12,
         expandedWidth: CGFloat = 232,
@@ -63,8 +63,6 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.notchWidth = notchWidth
         self.housingRowHeight = housingRowHeight
         self.showsAddButton = showsAddButton
-        self.chipRowHeight = chipRowHeight
-        self.chipWidth = max(chipWidth, minimumChipWidth)
         self.minimumChipWidth = minimumChipWidth
         self.horizontalPadding = horizontalPadding
         self.flare = flare
@@ -81,23 +79,31 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         providerCount + (showsAddButton ? 1 : 0)
     }
 
-    /// Total width the chips occupy.
-    public var contentWidth: CGFloat {
-        CGFloat(itemCount) * chipWidth
-    }
-
-    /// The resting surface: one group of chips, sized to them alone.
+    /// The resting panel: the housing's own size, exactly.
     ///
-    /// Narrower than the housing, which is what lets it read as the notch continuing
-    /// downward rather than as a bar of its own.
+    /// It only grows past the housing's width when the chips would otherwise be squeezed
+    /// below `minimumChipWidth` — past a certain number of tools, legibility wins over the
+    /// silhouette.
     public var collapsedSize: CGSize {
-        CGSize(
-            width: contentWidth + horizontalPadding * 2 + flare * 2,
-            height: chipRowHeight
-        )
+        let needed = CGFloat(itemCount) * minimumChipWidth + horizontalPadding * 2
+        return CGSize(width: max(notchWidth, needed), height: housingRowHeight)
     }
 
     public var collapsedHeight: CGFloat { collapsedSize.height }
+
+    /// Width of one chip: the panel divides its width evenly between them.
+    public var chipWidth: CGFloat {
+        guard itemCount > 0 else { return minimumChipWidth }
+        return (collapsedSize.width - horizontalPadding * 2) / CGFloat(itemCount)
+    }
+
+    /// Height of the chip row: the panel's full height.
+    public var chipRowHeight: CGFloat { collapsedSize.height }
+
+    /// Total width the chips occupy.
+    public var contentWidth: CGFloat {
+        collapsedSize.width - horizontalPadding * 2
+    }
 
     /// Minimized: a mini-notch — a small nub below the camera.
     ///
