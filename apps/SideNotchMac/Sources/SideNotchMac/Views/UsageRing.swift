@@ -95,26 +95,33 @@ struct UsageRing: View {
         }
         .frame(width: diameter, height: diameter)
     }
-    /// A bright arc travelling around the ring while the provider is being re-read.
+    /// A white arc travelling around a *separate, inner* ring while the provider is being
+    /// re-read.
     ///
-    /// Layered over whatever the ring already shows rather than replacing it, so the
-    /// existing figure stays readable during the refresh instead of blinking away.
+    /// Inside the usage track rather than on top of it. Overlaying the two meant the sweep
+    /// obscured the very figure it was refreshing; giving it its own smaller radius keeps
+    /// both legible at once, which is how the reference design handles it.
+    ///
+    /// One revolution takes 1.3s — measured off the reference rather than guessed. An
+    /// earlier 0.85s read as hurried next to it.
     private var refreshSweep: some View {
         Circle()
-            .trim(from: 0, to: 0.16)
+            .trim(from: 0, to: 0.17)
             .stroke(
-                Tokens.Palette.primaryText.opacity(0.85),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                Tokens.Palette.primaryText,
+                style: StrokeStyle(lineWidth: max(lineWidth * 0.62, 1), lineCap: .round)
             )
+            // Inset to its own radius, clear of the usage arc.
+            .padding(lineWidth * 1.7)
             .rotationEffect(.degrees(sweepAngle))
             .onAppear {
                 guard !reduceMotion else { return }
                 sweepAngle = 0
-                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
+                withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) {
                     sweepAngle = 360
                 }
             }
-            // Reduce Motion gets a steady highlight instead of a travelling one.
-            .opacity(reduceMotion ? 0.6 : 1)
+            // Reduce Motion gets a steady mark instead of a travelling one.
+            .opacity(reduceMotion ? 0.5 : 1)
     }
 }
