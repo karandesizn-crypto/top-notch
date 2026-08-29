@@ -49,6 +49,33 @@ public enum ResetCalculator {
         return "Resets \(formatter.string(from: resetAt))"
     }
 
+    /// A reset phrase short enough for a panel the width of the camera housing.
+    ///
+    /// Drops the time of day beyond a day out: "resets Sep 29, 1:38 AM" does not fit in
+    /// 185pt beside a percentage, and the hour is not what someone glancing at a monthly
+    /// window needs. Within a day the countdown is the useful part, so it stays.
+    public static func compactResetPhrase(
+        to resetAt: Date?, from now: Date = Date(), calendar: Calendar = .current
+    ) -> String? {
+        guard let resetAt else { return nil }
+        let remaining = resetAt.timeIntervalSince(now)
+        guard remaining > 0 else { return "resetting" }
+
+        if remaining < 3600 {
+            return "resets in \(max(Int(remaining / 60), 1))m"
+        }
+        if remaining < 86400 {
+            guard let value = countdown(to: resetAt, from: now) else { return nil }
+            return "resets in \(value)"
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate(remaining < 7 * 86400 ? "EEE" : "MMMd")
+        return "resets \(formatter.string(from: resetAt))"
+    }
+
     /// Human label for a window duration, e.g. "5-hour", "Weekly", "30-day".
     public static func windowLabel(forDuration duration: TimeInterval?) -> String? {
         guard let duration, duration > 0 else { return nil }

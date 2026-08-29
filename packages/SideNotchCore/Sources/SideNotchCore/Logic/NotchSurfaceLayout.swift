@@ -33,7 +33,6 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     public let horizontalPadding: CGFloat
     /// Outward flare where the surface meets the top of the display.
     public let flare: CGFloat
-    public let expandedWidth: CGFloat
     /// Height of the two-line snippet shown on hover.
     public let snippetHeight: CGFloat
     /// Extra height for the third line a click adds.
@@ -52,7 +51,6 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         minimumChipWidth: CGFloat = 34,
         horizontalPadding: CGFloat = 8,
         flare: CGFloat = 12,
-        expandedWidth: CGFloat = 232,
         snippetHeight: CGFloat = 34,
         pinnedExtraHeight: CGFloat = 15,
         miniNotchWidth: CGFloat = 38,
@@ -66,7 +64,6 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.minimumChipWidth = minimumChipWidth
         self.horizontalPadding = horizontalPadding
         self.flare = flare
-        self.expandedWidth = expandedWidth
         self.snippetHeight = snippetHeight
         self.pinnedExtraHeight = pinnedExtraHeight
         self.miniNotchWidth = miniNotchWidth
@@ -126,9 +123,14 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         bodyVerticalPadding * 2 + snippetHeight + (pinned ? pinnedExtraHeight : 0)
     }
 
+    /// Expanding grows the panel downward only.
+    ///
+    /// Its width stays the resting width — the housing's — because a panel wider than the
+    /// housing has to flare outward from it, and that overhang is what makes the surface
+    /// look stuck on rather than part of the notch.
     public func expandedSize(pinned: Bool) -> CGSize {
         CGSize(
-            width: max(expandedWidth, collapsedSize.width),
+            width: collapsedSize.width,
             height: collapsedSize.height + expandedBodyHeight(pinned: pinned)
         )
     }

@@ -327,8 +327,10 @@ struct NotchRootView: View {
 
         var parts = ["\(Int(percentage.rounded()))% used"]
         if settings.showResetCountdown,
-           let phrase = ResetCalculator.resetPhrase(to: window.resetDate, from: store.now) {
-            parts.append(phrase.replacingOccurrences(of: "Resets ", with: "resets "))
+           let phrase = ResetCalculator.compactResetPhrase(
+               to: window.resetDate, from: store.now
+           ) {
+            parts.append(phrase)
         }
         if store.isStale(surface.selected) { parts.append("stale") }
         return parts.joined(separator: " · ")

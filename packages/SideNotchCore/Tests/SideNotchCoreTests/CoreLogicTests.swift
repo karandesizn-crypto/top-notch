@@ -68,6 +68,57 @@ struct ResetCalculatorTests {
     }
 }
 
+@Suite("Compact reset phrasing")
+struct CompactResetTests {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+    @Test("within the hour, minutes")
+    func minutes() {
+        #expect(ResetCalculator.compactResetPhrase(to: now.addingTimeInterval(51 * 60), from: now)
+                == "resets in 51m")
+    }
+
+    @Test("within the day, the countdown")
+    func sameDay() {
+        #expect(ResetCalculator.compactResetPhrase(to: now.addingTimeInterval(5 * 3600), from: now)
+                == "resets in 5h 0m")
+    }
+
+    @Test("beyond a day, the time of day is dropped")
+    func dropsTimeOfDay() throws {
+        // "resets Sep 29, 1:38 AM" does not fit in a panel the width of the housing, and
+        // the hour is not what someone glancing at a monthly window needs.
+        let phrase = try #require(
+            ResetCalculator.compactResetPhrase(to: now.addingTimeInterval(30 * 86400), from: now)
+        )
+        #expect(phrase.hasPrefix("resets "))
+        #expect(!phrase.contains(":"))
+        #expect(!phrase.contains("AM") && !phrase.contains("PM"))
+        #expect(phrase.count <= 16)
+    }
+
+    @Test("an elapsed reset says so rather than counting backwards")
+    func elapsed() {
+        #expect(ResetCalculator.compactResetPhrase(to: now.addingTimeInterval(-60), from: now)
+                == "resetting")
+    }
+
+    @Test("no reset date yields nothing")
+    func noDate() {
+        #expect(ResetCalculator.compactResetPhrase(to: nil, from: now) == nil)
+    }
+
+    @Test("the compact form is never longer than the full one")
+    func alwaysShorter() {
+        for days in [0.02, 0.5, 2.0, 30.0] {
+            let date = now.addingTimeInterval(days * 86400)
+            let full = ResetCalculator.resetPhrase(to: date, from: now) ?? ""
+            let compact = ResetCalculator.compactResetPhrase(to: date, from: now) ?? ""
+            #expect(compact.count <= full.count)
+        }
+    }
+}
+
 @Suite("Snapshot behaviour")
 struct SnapshotTests {
     let now = Date()
@@ -328,6 +379,15 @@ struct NotchSurfaceLayoutTests {
     func snippetIsSmall() {
         #expect(three.expandedBodyHeight(pinned: false) == 52)
         #expect(three.expandedSize(pinned: false).height == three.collapsedSize.height + 52)
+    }
+
+    @Test("expanding grows downward only, never wider than the housing")
+    func expandingNeverWidens() {
+        // A panel wider than the housing has to flare outward from it, and that overhang
+        // is what makes the surface look stuck on rather than part of the notch.
+        #expect(three.expandedSize(pinned: false).width == three.collapsedSize.width)
+        #expect(three.expandedSize(pinned: true).width == three.collapsedSize.width)
+        #expect(three.expandedSize(pinned: true).width == three.notchWidth)
     }
 
     @Test("clicking adds one line, not a panel")

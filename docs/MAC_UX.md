@@ -84,6 +84,16 @@ legibility wins over the silhouette, and only the width gives; the height stays 
 
 ### Hovering a chip
 
+The panel grows **downward only**. Its width stays the housing's in every state: a panel
+wider than the housing has to flare outward from it, and that overhang is what made the
+surface look stuck on rather than part of the notch.
+
+Fitting inside 185pt is what the snippet's phrasing is built around. Beyond a day out the
+reset drops its time of day — "resets Sep 29, 1:38 AM" does not fit beside a percentage, and
+the hour is not what someone glancing at a monthly window needs. Within a day the countdown
+is the useful part, so it stays.
+
+
 A two-line snippet drops below the group: which provider and window, then the figure and its
 reset.
 
@@ -95,7 +105,7 @@ reset.
       ╰──────────────────────╯
 ```
 
-A glance, not a panel — 232×86. The most constrained window is the one shown, so a provider
+A glance, not a panel. The most constrained window is the one shown, so a provider
 reporting several does not make it taller; the limit that will bite first is the only one
 worth reading here.
 
