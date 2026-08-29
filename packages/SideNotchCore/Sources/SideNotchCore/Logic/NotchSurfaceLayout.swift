@@ -34,6 +34,11 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     public let expandedWidth: CGFloat
     /// Height of the two-line snippet shown on hover.
     public let snippetHeight: CGFloat
+    /// Extra height for the third line a click adds.
+    public let pinnedExtraHeight: CGFloat
+    /// The mini-notch: a small nub left behind when the chips are tucked away.
+    public let miniNotchWidth: CGFloat
+    public let miniNotchHeight: CGFloat
     public let bodyVerticalPadding: CGFloat
     public let providerCount: Int
 
@@ -49,6 +54,9 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         flare: CGFloat = 12,
         expandedWidth: CGFloat = 232,
         snippetHeight: CGFloat = 34,
+        pinnedExtraHeight: CGFloat = 15,
+        miniNotchWidth: CGFloat = 38,
+        miniNotchHeight: CGFloat = 5,
         bodyVerticalPadding: CGFloat = 9
     ) {
         self.providerCount = max(providerCount, 1)
@@ -62,6 +70,9 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.flare = flare
         self.expandedWidth = expandedWidth
         self.snippetHeight = snippetHeight
+        self.pinnedExtraHeight = pinnedExtraHeight
+        self.miniNotchWidth = miniNotchWidth
+        self.miniNotchHeight = miniNotchHeight
         self.bodyVerticalPadding = bodyVerticalPadding
     }
 
@@ -88,43 +99,47 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
 
     public var collapsedHeight: CGFloat { collapsedSize.height }
 
-    /// Minimized: nothing is drawn at all.
+    /// Minimized: a mini-notch — a small nub below the camera.
     ///
-    /// Only the invisible hover band remains, over the camera's own row, so the screen is
-    /// completely clear and every window beneath stays clickable.
-    public var minimizedSize: CGSize { .zero }
+    /// Not nothing. Drawing nothing leaves the way back invisible, and an affordance the
+    /// user cannot see is one they cannot use. The nub is small enough to ignore while
+    /// working and large enough to aim at.
+    public var minimizedSize: CGSize {
+        CGSize(width: miniNotchWidth, height: miniNotchHeight)
+    }
 
     /// Vertical offset of the drawn surface inside the window: it hangs below the camera.
     public var surfaceTopInset: CGFloat { housingRowHeight }
 
-    /// Height added on hover.
+    /// Height added on hover, and the extra line a click adds.
     ///
-    /// Fixed, and small: hovering shows a snippet — the window that matters and when it
-    /// resets — not a full panel. A provider with two windows gets the more constrained
-    /// one rather than a taller card.
-    public var expandedBodyHeight: CGFloat {
-        bodyVerticalPadding * 2 + snippetHeight
+    /// Small either way: hovering shows the window that matters and when it resets, not a
+    /// full panel. Clicking adds one line, because a deliberate click asks for a little
+    /// more than a passing glance does.
+    public func expandedBodyHeight(pinned: Bool) -> CGFloat {
+        bodyVerticalPadding * 2 + snippetHeight + (pinned ? pinnedExtraHeight : 0)
     }
 
-    public var expandedSize: CGSize {
+    public func expandedSize(pinned: Bool) -> CGSize {
         CGSize(
             width: max(expandedWidth, collapsedSize.width),
-            height: collapsedSize.height + expandedBodyHeight
+            height: collapsedSize.height + expandedBodyHeight(pinned: pinned)
         )
     }
 
-    public func size(expanded: Bool, minimized: Bool) -> CGSize {
+    public func size(expanded: Bool, minimized: Bool, pinned: Bool) -> CGSize {
         if minimized { return minimizedSize }
-        return expanded ? expandedSize : collapsedSize
+        return expanded ? expandedSize(pinned: pinned) : collapsedSize
     }
 
     /// Window size: wide and tall enough for every reachable state, so expanding is purely
     /// a SwiftUI animation with no window resize.
     public var windowSize: CGSize {
-        CGSize(
+        let widest = max(expandedSize(pinned: true).width, collapsedSize.width)
+        return CGSize(
             // At least the housing's width, so the hover band covers the whole camera.
-            width: max(max(expandedSize.width, collapsedSize.width), notchWidth),
-            height: surfaceTopInset + expandedSize.height
+            width: max(widest, notchWidth),
+            height: surfaceTopInset + expandedSize(pinned: true).height
         )
     }
 }

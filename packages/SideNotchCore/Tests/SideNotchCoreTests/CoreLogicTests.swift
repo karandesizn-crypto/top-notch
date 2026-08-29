@@ -307,33 +307,50 @@ struct NotchSurfaceLayoutTests {
         #expect(squeezed.chipWidth == squeezed.minimumChipWidth)
     }
 
-    @Test("minimized draws nothing at all")
+    @Test("minimized leaves a mini-notch, not nothing")
     func minimized() {
-        // Only the invisible hover band remains, so the screen is completely clear.
-        #expect(three.minimizedSize == .zero)
+        // An affordance the user cannot see is one they cannot use, so something stays.
+        #expect(three.minimizedSize == CGSize(width: 38, height: 5))
+        #expect(three.minimizedSize.height < three.collapsedSize.height)
+        #expect(three.minimizedSize.width < three.collapsedSize.width)
     }
 
     @Test("hovering adds a snippet, not a panel")
     func snippetIsSmall() {
-        #expect(three.expandedBodyHeight == 52)     // 9 padding x2 + 34 snippet
-        #expect(three.expandedSize.height == three.collapsedSize.height + 52)
-        #expect(three.expandedSize.height == 86)
+        #expect(three.expandedBodyHeight(pinned: false) == 52)   // 9 padding x2 + 34
+        #expect(three.expandedSize(pinned: false).height == three.collapsedSize.height + 52)
+        #expect(three.expandedSize(pinned: false).height == 86)
     }
 
-    @Test("state selection covers all three forms")
+    @Test("clicking adds one line, not a panel")
+    func pinnedAddsOneLine() {
+        let hovered = three.expandedBodyHeight(pinned: false)
+        let clicked = three.expandedBodyHeight(pinned: true)
+        #expect(clicked - hovered == three.pinnedExtraHeight)
+        #expect(clicked - hovered == 15)
+    }
+
+    @Test("state selection covers every form")
     func sizeForState() {
-        #expect(three.size(expanded: false, minimized: true) == .zero)
-        #expect(three.size(expanded: false, minimized: false) == three.collapsedSize)
-        #expect(three.size(expanded: true, minimized: false) == three.expandedSize)
-        // Minimized wins: tucking away must not be undone by a stale hover.
-        #expect(three.size(expanded: true, minimized: true) == .zero)
+        #expect(three.size(expanded: false, minimized: true, pinned: false)
+                == three.minimizedSize)
+        #expect(three.size(expanded: false, minimized: false, pinned: false)
+                == three.collapsedSize)
+        #expect(three.size(expanded: true, minimized: false, pinned: false)
+                == three.expandedSize(pinned: false))
+        #expect(three.size(expanded: true, minimized: false, pinned: true)
+                == three.expandedSize(pinned: true))
+        // Minimized wins: tucking away must not be undone by a stale hover or pin.
+        #expect(three.size(expanded: true, minimized: true, pinned: true)
+                == three.minimizedSize)
     }
 
     @Test("the window covers the whole camera, so the hover band can be reached")
     func windowSpansTheCamera() {
         // The group is narrower than the housing, but the band above it must not be.
         #expect(three.windowSize.width >= three.notchWidth)
-        #expect(three.windowSize.height == three.surfaceTopInset + three.expandedSize.height)
+        #expect(three.windowSize.height
+                == three.surfaceTopInset + three.expandedSize(pinned: true).height)
     }
 
     @Test("the window fits every reachable state, so changing state never resizes it")
@@ -342,7 +359,11 @@ struct NotchSurfaceLayoutTests {
             let layout = NotchSurfaceLayout(
                 providerCount: count, notchWidth: 185, housingRowHeight: 32
             )
-            for size in [layout.collapsedSize, layout.expandedSize, layout.minimizedSize] {
+            let states = [
+                layout.collapsedSize, layout.minimizedSize,
+                layout.expandedSize(pinned: false), layout.expandedSize(pinned: true),
+            ]
+            for size in states {
                 #expect(size.width <= layout.windowSize.width)
                 #expect(layout.surfaceTopInset + size.height <= layout.windowSize.height)
             }

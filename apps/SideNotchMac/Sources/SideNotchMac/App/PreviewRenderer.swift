@@ -28,12 +28,13 @@ enum PreviewRenderer {
 
         let state = NotchSurfaceState()
         state.isExpanded = expanded
-        state.isPinned = expanded
+        state.isPinned = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER_PINNED"] == "1"
+        state.isMinimized = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER_MINI"] == "1"
         state.selected = selected ?? store.visibleProviders.first ?? .codex
 
         let canvasWidth: CGFloat = 760
         let chromeHeight = notch.notchHeight
-        let canvasHeight = layout.expandedSize.height + 70
+        let canvasHeight = layout.expandedSize(pinned: true).height + 70
 
         let content = ZStack(alignment: .top) {
             LinearGradient(

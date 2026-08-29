@@ -18,9 +18,12 @@ struct UsageRing: View {
     /// Bold figure below the ring. Omitted in the compact form.
     var caption: String?
     var isEmphasized: Bool = true
+    /// Draws a sweep around the ring while a refresh is in flight.
+    var isRefreshing: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spinnerAngle: Double = 0
+    @State private var sweepAngle: Double = 0
 
     private var color: Color { Tokens.Palette.color(for: state) }
 
@@ -38,6 +41,9 @@ struct UsageRing: View {
             }
         }
         .opacity(isEmphasized ? 1 : 0.45)
+        // A small give on the ring itself, so a click registers as having done something.
+        .scaleEffect(isRefreshing && !reduceMotion ? 0.93 : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.6), value: isRefreshing)
     }
 
     private var ring: some View {
@@ -84,7 +90,31 @@ struct UsageRing: View {
                 tint: state.hasMeasurement
                     ? Tokens.Palette.primaryText : Tokens.Palette.secondaryText
             )
+
+            if isRefreshing { refreshSweep }
         }
         .frame(width: diameter, height: diameter)
+    }
+    /// A bright arc travelling around the ring while the provider is being re-read.
+    ///
+    /// Layered over whatever the ring already shows rather than replacing it, so the
+    /// existing figure stays readable during the refresh instead of blinking away.
+    private var refreshSweep: some View {
+        Circle()
+            .trim(from: 0, to: 0.16)
+            .stroke(
+                Tokens.Palette.primaryText.opacity(0.85),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+            .rotationEffect(.degrees(sweepAngle))
+            .onAppear {
+                guard !reduceMotion else { return }
+                sweepAngle = 0
+                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
+                    sweepAngle = 360
+                }
+            }
+            // Reduce Motion gets a steady highlight instead of a travelling one.
+            .opacity(reduceMotion ? 0.6 : 1)
     }
 }

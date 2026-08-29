@@ -87,15 +87,32 @@ A glance, not a panel — 232×86. The most constrained window is the one shown,
 reporting several does not make it taller; the limit that will bite first is the only one
 worth reading here.
 
-### Minimized
+### Clicking a chip
 
-Above the group, the window still spans the camera's own row as an **invisible hover band**.
-Nothing is drawn there, so nothing is covered, but hovering it tucks the chips away entirely
-— the drawn surface becomes nothing at all and the screen is completely clear. Hovering the
-band again brings the group back.
+A click selects the provider, pins the snippet open, and **re-reads that provider**. The
+ring shows a bright arc travelling around it while the read is in flight, layered over the
+existing figure rather than replacing it, so the number stays readable during the refresh
+instead of blinking away.
 
-Keeping the gesture on the camera itself is deliberate: it is the one part of the menu bar
-row that never holds anything else. It toggles on entry rather than continuously, so one
+Re-reading on click is the point: a deliberate click usually means *is this still true?*,
+and the sweep answers that the question was heard even when the figure comes back unchanged.
+
+A pinned snippet earns one more line than a hovered one — plan, the other window, reset
+credits, tokens today — built only from what the provider actually reported, so it is short
+or absent entirely for a sparse provider.
+
+### The mini-notch
+
+Above the group, the window spans the camera's own row as an **invisible hover band**.
+Nothing is drawn there, so nothing is covered, but hovering it tucks the chips away.
+
+What is left is a **mini-notch**: a 38×5pt nub just below the camera. Not nothing — drawing
+nothing would leave the way back invisible, and an affordance nobody can see is one nobody
+can use. It is small enough to ignore while working and has a forgiving hit area for its
+size. Hovering it brings the group straight back.
+
+Keeping the hide gesture on the camera itself is deliberate: it is the one part of the menu
+bar row that never holds anything else. It toggles on entry rather than continuously, so one
 pass of the pointer fires it once instead of flickering while the pointer rests there.
 
 ## Silhouette

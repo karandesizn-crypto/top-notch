@@ -40,7 +40,9 @@ struct NotchRootView: View {
     private var minimized: Bool { surface.isMinimized }
 
     private var size: CGSize {
-        SurfaceSizing.size(layout: layout, expanded: expanded, minimized: minimized)
+        SurfaceSizing.size(
+            layout: layout, expanded: expanded, minimized: minimized, pinned: surface.isPinned
+        )
     }
 
     private var shape: NotchSurfaceShape {
@@ -53,7 +55,10 @@ struct NotchRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             hoverBand
-            if !minimized {
+            if minimized {
+                miniNotch
+                    .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .top)))
+            } else {
                 surfaceBody
                     .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
             }
@@ -80,6 +85,26 @@ struct NotchRootView: View {
                 }
             }
             .accessibilityLabel(minimized ? "Show SideNotch" : "Hide SideNotch")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    /// The mini-notch: what is left when the chips are tucked away.
+    ///
+    /// Small enough to ignore while working, and visible enough to aim at — drawing nothing
+    /// would leave the way back invisible, which is an affordance nobody can use. Hovering
+    /// it brings the group straight back.
+    private var miniNotch: some View {
+        Capsule()
+            .fill(Tokens.Palette.surface)
+            .frame(width: layout.miniNotchWidth, height: layout.miniNotchHeight)
+            .contentShape(Rectangle().inset(by: -6))   // a forgiving target for its size
+            .onHover { hovering in
+                guard hovering else { return }
+                withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
+                    surface.isMinimized = false
+                }
+            }
+            .accessibilityLabel("Show SideNotch")
             .accessibilityAddTraits(.isButton)
     }
 
@@ -175,7 +200,7 @@ struct NotchRootView: View {
         let isSelected = expanded && provider == surface.selected
 
         return Button {
-            select(provider)
+            activate(provider)
         } label: {
             HStack(spacing: 4) {
                 UsageRing(
@@ -184,7 +209,8 @@ struct NotchRootView: View {
                     provider: provider,
                     diameter: Tokens.Ring.chipDiameter,
                     lineWidth: Tokens.Ring.chipLineWidth,
-                    glyphSize: Tokens.Ring.chipGlyph
+                    glyphSize: Tokens.Ring.chipGlyph,
+                    isRefreshing: providerStatus?.isRefreshing ?? false
                 )
                 if settings.showPercentages {
                     Text(caption(for: providerStatus))
@@ -240,11 +266,57 @@ struct NotchRootView: View {
                 .font(Tokens.Type_.rowMeta)
                 .foregroundStyle(Tokens.Palette.secondaryText)
                 .lineLimit(1)
+
+            if surface.isPinned, let extra = pinnedDetail {
+                Text(extra)
+                    .font(Tokens.Type_.rowMeta)
+                    .foregroundStyle(Tokens.Palette.tertiaryText)
+                    .lineLimit(1)
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Surface.bodyPadding + layout.flare)
         .padding(.vertical, layout.bodyVerticalPadding)
-        .frame(width: size.width, height: layout.expandedBodyHeight, alignment: .leading)
+        .frame(
+            width: size.width,
+            height: layout.expandedBodyHeight(pinned: surface.isPinned),
+            alignment: .leading
+        )
+    }
+
+    /// The extra line a click earns: plan, the other window, credits, tokens today.
+    ///
+    /// Only what the provider actually reported — an absent field is omitted rather than
+    /// shown empty, so this line is short or missing entirely for a sparse provider.
+    private var pinnedDetail: String? {
+        guard let snapshot = status?.snapshot else { return nil }
+        var parts: [String] = []
+
+        if let plan = snapshot.plan { parts.append(plan.uppercased()) }
+
+        // The window the headline is not already showing.
+        if let other = snapshot.windows.first(where: { $0.id != status?.headlineWindow?.id }),
+           let percentage = other.usedPercentage {
+            parts.append("\(other.label) \(Int(percentage.rounded()))%")
+        }
+
+        if let credits = snapshot.credits?.resetCreditsAvailable, credits > 0 {
+            parts.append("\(credits) reset credit\(credits == 1 ? "" : "s")")
+        }
+        if let raw = snapshot.metadata["tokensToday"], let tokens = Int64(raw), tokens > 0 {
+            parts.append(Self.formatTokens(tokens) + " today")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func formatTokens(_ tokens: Int64) -> String {
+        switch tokens {
+        case 1_000_000...: String(format: "%.1fM", Double(tokens) / 1_000_000)
+        case 1_000...: "\(tokens / 1_000)K"
+        default: "\(tokens)"
+        }
     }
 
     private var snippetTitle: String {
@@ -273,11 +345,19 @@ struct NotchRootView: View {
         return "\(Int(percentage.rounded()))%"
     }
 
-    private func select(_ provider: ProviderID) {
-        withAnimation(Tokens.Motion.content(reduceMotion: reduceMotion)) {
+    /// A click selects the provider, pins its snippet open, and re-reads it.
+    ///
+    /// Re-reading on click is the point: a deliberate click usually means "is this still
+    /// true?", and the ring's sweep answers that the question was heard even when the
+    /// figure comes back unchanged.
+    private func activate(_ provider: ProviderID) {
+        withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
             surface.selected = provider
-            if !surface.isExpanded { surface.isExpanded = true }
+            surface.isExpanded = true
+            surface.isPinned = true
+            surface.isMinimized = false
         }
+        Task { await store.refresh(provider) }
     }
 
     // MARK: Accessibility
