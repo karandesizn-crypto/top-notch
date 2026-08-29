@@ -24,15 +24,16 @@ public struct UsageThresholds: Codable, Sendable, Equatable {
     }
 }
 
-/// Derives `UsageState` from a measurement.
-public enum UsageStateEvaluator {
-    /// An absent measurement yields `.unavailable`, never `.normal` — an unknown reading
-    /// must not be reported as healthy.
-    public static func state(
+/// Derives a `UsageLevel` from a measurement.
+public enum UsageLevelEvaluator {
+    /// An absent measurement yields nil, never `.normal` — an unknown reading must not be
+    /// reported as healthy. Whether the provider answered at all is `UsageStatus`, not
+    /// this; conflating the two is what let a failure read as "fine".
+    public static func level(
         forUsedFraction fraction: Double?,
         thresholds: UsageThresholds = .default
-    ) -> UsageState {
-        guard let fraction else { return .unavailable }
+    ) -> UsageLevel? {
+        guard let fraction else { return nil }
         if fraction >= 1 { return .exhausted }
         if fraction >= thresholds.critical { return .critical }
         if fraction >= thresholds.warning { return .warning }

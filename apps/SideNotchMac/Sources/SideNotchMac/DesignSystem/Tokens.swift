@@ -52,10 +52,11 @@ enum Tokens {
 
         /// The single source of colour for usage state.
         ///
-        /// Driven entirely by `UsageState`, which `UsageStateEvaluator` derives from the
-        /// user's thresholds. There is deliberately no second ramp: two systems would let
-        /// the ring disagree with the alerts.
-        static func color(for state: UsageState) -> Color {
+        /// Driven by `ProviderDisplayState`, which folds the domain's status and level
+        /// into the one thing the ring needs: which treatment to draw. There is
+        /// deliberately no second ramp — two systems would let the ring disagree with the
+        /// alerts.
+        static func color(for state: ProviderDisplayState) -> Color {
             switch state {
             case .normal: normal
             case .warning: warning
@@ -88,7 +89,7 @@ enum Tokens {
     }
 }
 
-extension ProviderID {
+extension ProviderType {
     /// SF Symbols stand in for provider marks: shipping the real Anthropic, OpenAI, and
     /// Cursor logos needs a trademark review first. User-added tools get a neutral glyph.
     var symbolName: String {

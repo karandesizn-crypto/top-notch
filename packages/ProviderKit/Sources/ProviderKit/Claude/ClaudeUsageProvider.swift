@@ -23,14 +23,14 @@ import SideNotchCore
 /// exists, or option 3 is explicitly approved, this reports `.unsupported` rather than
 /// showing a stale number as if it were current.
 public struct ClaudeUsageProvider: UsageProvider {
-    public let id: ProviderID = .claude
+    public let providerType: ProviderType = .claude
     public let displayName = "Claude"
 
     public init() {}
 
-    public func fetchSnapshot() async throws -> UsageSnapshot {
-        throw ProviderError.unsupported(
-            reason: "No local usage API yet"
-        )
+    /// Reports unsupported rather than throwing: having no readable interface is a fact
+    /// about the provider, not a failure of this attempt, and the UI needs to say so.
+    public func fetchUsage() async throws -> UsageState {
+        UsageState.unsupported(provider: providerType, reason: "No local usage API yet")
     }
 }

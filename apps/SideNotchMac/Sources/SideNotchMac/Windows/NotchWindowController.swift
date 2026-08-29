@@ -8,7 +8,7 @@ import ProviderKit
 @MainActor
 final class NotchWindowController {
     private let window: NotchWindow
-    private let store: UsageStore
+    private let store: UsageManager
     private let settings: AppSettings
     private let placement: DisplayPlacementService
     private let surface = NotchSurfaceState()
@@ -24,7 +24,7 @@ final class NotchWindowController {
     /// Extra margin around the drawn surface for hit testing.
     private static let hitSlop: CGFloat = 7
 
-    init(store: UsageStore, settings: AppSettings, placement: DisplayPlacementService) {
+    init(store: UsageManager, settings: AppSettings, placement: DisplayPlacementService) {
         self.store = store
         self.settings = settings
         self.placement = placement
@@ -127,7 +127,7 @@ final class NotchWindowController {
     }
 
     /// Selects the provider the collapsed surface shows.
-    func selectProvider(_ provider: ProviderID) {
+    func selectProvider(_ provider: ProviderType) {
         surface.selected = provider
     }
 
@@ -164,7 +164,7 @@ final class NotchWindowController {
     ///
     /// Static so the initializer can call it before `self` exists.
     private static func layout(
-        store: UsageStore, settings: AppSettings, placement: DisplayPlacementService
+        store: UsageManager, settings: AppSettings, placement: DisplayPlacementService
     ) -> NotchSurfaceLayout {
         SurfaceSizing.layout(
             providerCount: store.visibleProviders.count,
@@ -201,7 +201,7 @@ final class NotchWindowController {
 
 /// Bridges the observable state into SwiftUI.
 struct NotchHost: View {
-    let store: UsageStore
+    let store: UsageManager
     let settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout

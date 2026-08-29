@@ -27,11 +27,11 @@ public enum AppearanceMode: String, CaseIterable, Codable, Sendable, Identifiabl
 
 /// A provider the user added by hand.
 struct CustomProviderDefinition: Codable, Identifiable, Hashable, Sendable {
-    /// `ProviderID.rawValue`.
+    /// `ProviderType.rawValue`.
     let id: String
     var name: String
 
-    var providerID: ProviderID { ProviderID(id) }
+    var providerType: ProviderType { ProviderType(id) }
 }
 
 /// User preferences, persisted to `UserDefaults`.
@@ -48,7 +48,7 @@ final class AppSettings {
     /// Cap on the row, so the tab cannot grow wider than the display it hangs from.
     static let maximumProviders = 6
 
-    var enabledProviders: Set<ProviderID> {
+    var enabledProviders: Set<ProviderType> {
         didSet { store(enabledProviders.map(\.rawValue), .enabledProviders) }
     }
     var customProviders: [CustomProviderDefinition] {
@@ -83,8 +83,8 @@ final class AppSettings {
     }
 
     /// Every provider that could appear, built-ins first then the user's own.
-    var allProviders: [ProviderID] {
-        ProviderID.builtIn + customProviders.map(\.providerID)
+    var allProviders: [ProviderType] {
+        ProviderType.builtIn + customProviders.map(\.providerType)
     }
 
     private let defaults: UserDefaults
@@ -108,9 +108,9 @@ final class AppSettings {
         // The three shipped providers are all on by default: the product's promise is one
         // glance at all of them, and a provider that cannot report yet still says so.
         if let raw = defaults.array(forKey: Key.enabledProviders.rawValue) as? [String] {
-            enabledProviders = Set(raw.map { ProviderID($0) })
+            enabledProviders = Set(raw.map { ProviderType($0) })
         } else {
-            enabledProviders = Set(ProviderID.builtIn)
+            enabledProviders = Set(ProviderType.builtIn)
         }
 
         launchAtLogin = defaults.object(forKey: Key.launchAtLogin.rawValue) as? Bool ?? false
@@ -131,23 +131,23 @@ final class AppSettings {
         showsWithoutNotch = defaults.object(forKey: Key.showsWithoutNotch.rawValue) as? Bool ?? false
     }
 
-    func isEnabled(_ provider: ProviderID) -> Bool { enabledProviders.contains(provider) }
+    func isEnabled(_ provider: ProviderType) -> Bool { enabledProviders.contains(provider) }
 
-    func setEnabled(_ enabled: Bool, for provider: ProviderID) {
+    func setEnabled(_ enabled: Bool, for provider: ProviderType) {
         if enabled { enabledProviders.insert(provider) } else { enabledProviders.remove(provider) }
     }
 
-    func displayName(for provider: ProviderID) -> String {
+    func displayName(for provider: ProviderType) -> String {
         customProviders.first { $0.id == provider.rawValue }?.name
             ?? provider.defaultDisplayName
     }
 
     /// Adds a provider by title. Returns nil when the title is empty or already taken.
     @discardableResult
-    func addCustomProvider(named title: String) -> ProviderID? {
-        let slug = ProviderID.slug(from: title)
+    func addCustomProvider(named title: String) -> ProviderType? {
+        let slug = ProviderType.slug(from: title)
         guard !slug.isEmpty else { return nil }
-        let id = ProviderID(slug)
+        let id = ProviderType(slug)
         guard !allProviders.contains(id) else { return nil }
 
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -156,7 +156,7 @@ final class AppSettings {
         return id
     }
 
-    func removeCustomProvider(_ provider: ProviderID) {
+    func removeCustomProvider(_ provider: ProviderType) {
         customProviders.removeAll { $0.id == provider.rawValue }
         enabledProviders.remove(provider)
     }

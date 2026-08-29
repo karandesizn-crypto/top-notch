@@ -2,26 +2,33 @@ import Foundation
 import SideNotchCore
 
 /// Deterministic provider for previews, UI work, and tests.
+///
+/// Reachable only when the app is launched with `SIDENOTCH_MOCK=1`, and paired with an
+/// in-memory cache so its figures can never reach the real one.
 public struct MockUsageProvider: UsageProvider {
-    public let id: ProviderID
+    public let providerType: ProviderType
     public let displayName: String
-    private let result: Result<UsageSnapshot, ProviderError>
+    private let result: Result<UsageState, ProviderError>
 
-    public init(id: ProviderID, displayName: String, result: Result<UsageSnapshot, ProviderError>) {
-        self.id = id
+    public init(
+        providerType: ProviderType,
+        displayName: String,
+        result: Result<UsageState, ProviderError>
+    ) {
+        self.providerType = providerType
         self.displayName = displayName
         self.result = result
     }
 
-    public func fetchSnapshot() async throws -> UsageSnapshot {
+    public func fetchUsage() async throws -> UsageState {
         try result.get()
     }
 
     /// One provider per state, so every visual treatment has something to render.
     public static func showcase(now: Date = Date()) -> [MockUsageProvider] {
         [
-            MockUsageProvider(id: .claude, displayName: "Claude", result: .success(
-                UsageSnapshot(
+            MockUsageProvider(providerType: .claude, displayName: "Claude", result: .success(
+                UsageState.live(
                     provider: .claude, plan: "max",
                     windows: [
                         UsageWindow.fromPercentage(
@@ -35,11 +42,11 @@ public struct MockUsageProvider: UsageProvider {
                             duration: 7 * 86400
                         ),
                     ],
-                    lastUpdated: now
+                    at: now
                 )
             )),
-            MockUsageProvider(id: .codex, displayName: "Codex", result: .success(
-                UsageSnapshot(
+            MockUsageProvider(providerType: .codex, displayName: "Codex", result: .success(
+                UsageState.live(
                     provider: .codex, plan: "go",
                     windows: [
                         UsageWindow.fromPercentage(
@@ -49,11 +56,13 @@ public struct MockUsageProvider: UsageProvider {
                         )
                     ],
                     credits: CreditsInfo(hasCredits: false, unlimited: false, resetCreditsAvailable: 1),
-                    lastUpdated: now
+                    at: now
                 )
             )),
-            MockUsageProvider(id: .cursor, displayName: "Cursor", result: .failure(
-                .unsupported(reason: "Cursor does not expose usage outside its own app")
+            MockUsageProvider(providerType: .cursor, displayName: "Cursor", result: .success(
+                UsageState.unsupported(
+                    provider: .cursor, reason: "Not exposed outside Cursor", at: now
+                )
             )),
         ]
     }

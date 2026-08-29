@@ -43,20 +43,39 @@ public enum ProviderError: Error, Equatable, Sendable {
 /// Deliberately free of any UI type. Adapters may spawn processes, read files, or call
 /// services; nothing above this protocol knows which.
 public protocol UsageProvider: Sendable {
-    var id: ProviderID { get }
+    var providerType: ProviderType { get }
     var displayName: String { get }
 
     /// Prepares long-lived resources. Must be safe to call more than once.
-    func start() async
+    func startMonitoring() async
 
-    /// Releases those resources. Must be safe to call without a prior `start()`.
-    func stop() async
+    /// Releases those resources. Must be safe to call without a prior `startMonitoring()`.
+    func stopMonitoring() async
 
-    /// Reads current usage. Throws `ProviderError`; never blocks indefinitely.
-    func fetchSnapshot() async throws -> UsageSnapshot
+    /// Reads current usage.
+    ///
+    /// Returns a `UsageState` carrying its own status and source, rather than throwing for
+    /// "no data available" — an unsupported provider is a legitimate answer, not a failure.
+    /// Throwing is reserved for genuine read errors, which the manager turns into an
+    /// `.unavailable` or `.error` state.
+    func fetchUsage() async throws -> UsageState
 }
 
 public extension UsageProvider {
-    func start() async {}
-    func stop() async {}
+    func startMonitoring() async {}
+    func stopMonitoring() async {}
+}
+
+public extension ProviderError {
+    /// The status a failed read should be recorded as.
+    ///
+    /// `.unsupported` is structural — the provider has no readable interface — so it is
+    /// kept distinct from failures that a later attempt might survive.
+    var status: UsageStatus {
+        switch self {
+        case .unsupported: .unsupported
+        case .notInstalled, .notRunning, .authenticationRequired, .network: .unavailable
+        case .invalidResponse, .unknown: .error
+        }
+    }
 }

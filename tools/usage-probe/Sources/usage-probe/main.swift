@@ -27,30 +27,30 @@ print(columns.map { pad($0.0, $0.1) }.joined())
 print(String(repeating: "─", count: columns.reduce(0) { $0 + $1.1 }))
 
 for provider in providers {
-    await provider.start()
+    await provider.startMonitoring()
     do {
-        let snapshot = try await provider.fetchSnapshot()
-        if snapshot.windows.isEmpty {
+        let usage = try await provider.fetchUsage()
+        if usage.windows.isEmpty {
             print(pad(provider.displayName, 10) + "no metered windows reported")
         }
-        for window in snapshot.windows {
+        for window in usage.windows {
             print(
                 pad(provider.displayName, 10)
                 + pad(window.label, 18)
                 + pad(window.usedPercentage.map { String(format: "%.0f%%", $0) } ?? "—", 8)
                 + pad(ResetCalculator.resetPhrase(to: window.resetDate, from: now) ?? "—", 24)
-                + pad(window.state.rawValue, 13)
+                + pad(window.level?.rawValue ?? usage.status.rawValue, 13)
             )
         }
         var extras: [String] = []
-        if let plan = snapshot.plan { extras.append("plan: \(plan)") }
-        if let credits = snapshot.credits {
+        if let plan = usage.plan { extras.append("plan: \(plan)") }
+        if let credits = usage.credits {
             if let count = credits.resetCreditsAvailable, count > 0 {
                 extras.append("reset credits: \(count)")
             }
             if credits.unlimited { extras.append("unlimited credits") }
         }
-        if staleness.isStale(snapshot, now: now) { extras.append("STALE") }
+        if staleness.isStale(usage, now: now) { extras.append("STALE") }
         if !extras.isEmpty { print(pad("", 10) + "└─ " + extras.joined(separator: "  ·  ")) }
     } catch let error as ProviderError {
         print(pad(provider.displayName, 10) + pad("—", 18) + pad("—", 8)
@@ -59,6 +59,6 @@ for provider in providers {
     } catch {
         print(pad(provider.displayName, 10) + "unexpected failure")
     }
-    await provider.stop()
+    await provider.stopMonitoring()
 }
 print("")

@@ -5,7 +5,7 @@ import ProviderKit
 /// The settings window.
 struct SettingsView: View {
     @Bindable var settings: AppSettings
-    let store: UsageStore
+    let store: UsageManager
     let onSettingsChanged: () -> Void
     let onProvidersChanged: () -> Void
 
@@ -26,7 +26,7 @@ struct SettingsView: View {
     private var providersTab: some View {
         Form {
             Section("Built in") {
-                ForEach(ProviderID.builtIn) { provider in
+                ForEach(ProviderType.builtIn) { provider in
                     providerRow(provider)
                 }
             }
@@ -34,9 +34,9 @@ struct SettingsView: View {
             Section {
                 ForEach(settings.customProviders) { definition in
                     HStack {
-                        providerRow(definition.providerID)
+                        providerRow(definition.providerType)
                         Button {
-                            settings.removeCustomProvider(definition.providerID)
+                            settings.removeCustomProvider(definition.providerType)
                             onProvidersChanged()
                         } label: {
                             Image(systemName: "minus.circle.fill")
@@ -70,8 +70,8 @@ struct SettingsView: View {
 
     private var canAdd: Bool {
         settings.canAddProvider
-            && !ProviderID.slug(from: newProviderName).isEmpty
-            && !settings.allProviders.contains(ProviderID(ProviderID.slug(from: newProviderName)))
+            && !ProviderType.slug(from: newProviderName).isEmpty
+            && !settings.allProviders.contains(ProviderType(ProviderType.slug(from: newProviderName)))
     }
 
     private func addProvider() {
@@ -81,7 +81,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func providerRow(_ provider: ProviderID) -> some View {
+    private func providerRow(_ provider: ProviderType) -> some View {
         let status = store.status(for: provider)
         Toggle(isOn: Binding(
             get: { settings.isEnabled(provider) },

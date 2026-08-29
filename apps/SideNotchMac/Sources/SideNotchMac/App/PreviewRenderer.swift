@@ -13,10 +13,10 @@ import SideNotchCore
 enum PreviewRenderer {
     static func render(
         to path: String,
-        store: UsageStore,
+        store: UsageManager,
         settings: AppSettings,
         notch: NotchMetrics,
-        selected: ProviderID?,
+        selected: ProviderType?,
         expanded: Bool
     ) {
         let layout = SurfaceSizing.layout(

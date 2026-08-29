@@ -1,7 +1,7 @@
 import Foundation
 import SideNotchCore
 
-/// Normalizes the Codex app-server reply into a `UsageSnapshot`.
+/// Normalizes the Codex app-server reply into a `UsageState`.
 ///
 /// Split out from the provider so it can be tested against recorded payloads without
 /// launching a process.
@@ -12,7 +12,7 @@ enum CodexSnapshotMapper {
         tokenUsage: GetAccountTokenUsageResponse? = nil,
         thresholds: UsageThresholds = .default,
         now: Date = Date()
-    ) -> UsageSnapshot {
+    ) -> UsageState {
         // Prefer the metered bucket for `limitId` "codex"; the flat `rateLimits` field is
         // documented as a backward-compatible mirror and may not survive.
         let source = response.rateLimitsByLimitId?["codex"] ?? response.rateLimits
@@ -34,7 +34,7 @@ enum CodexSnapshotMapper {
                     usedFraction: UsageWindow.normalize(1 - spend.remainingPercent / 100),
                     resetDate: Date(timeIntervalSince1970: TimeInterval(spend.resetsAt)),
                     duration: nil,
-                    state: UsageStateEvaluator.state(
+                    level: UsageLevelEvaluator.level(
                         forUsedFraction: 1 - spend.remainingPercent / 100, thresholds: thresholds
                     )
                 )
@@ -61,17 +61,16 @@ enum CodexSnapshotMapper {
             }
         }
 
-        return UsageSnapshot(
+        // A reply with no windows at all is still a successful read — the account simply
+        // has no metered limits — so this stays `.live`/`.available` rather than becoming
+        // an error state.
+        return UsageState.live(
             provider: .codex,
             plan: source.planType,
             windows: windows,
             credits: credits(from: source.credits, resetCredits: response.rateLimitResetCredits),
-            // A reply with no windows at all is still a successful read — the account
-            // simply has no metered limits — so availability stays `.available` and the
-            // UI shows an empty rather than a broken state.
-            availability: .available,
-            lastUpdated: now,
-            metadata: metadata
+            metadata: metadata,
+            at: now
         )
     }
 

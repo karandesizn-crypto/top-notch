@@ -11,17 +11,15 @@ import SideNotchCore
 /// When a tool does ship a supported local interface, writing an adapter for it is the only
 /// change needed; nothing above `UsageProvider` knows the difference.
 public struct CustomUsageProvider: UsageProvider {
-    public let id: ProviderID
+    public let providerType: ProviderType
     public let displayName: String
 
-    public init(id: ProviderID, displayName: String) {
-        self.id = id
+    public init(providerType: ProviderType, displayName: String) {
+        self.providerType = providerType
         self.displayName = displayName
     }
 
-    public func fetchSnapshot() async throws -> UsageSnapshot {
-        throw ProviderError.unsupported(
-            reason: "No usage interface"
-        )
+    public func fetchUsage() async throws -> UsageState {
+        UsageState.unsupported(provider: providerType, reason: "No usage interface")
     }
 }

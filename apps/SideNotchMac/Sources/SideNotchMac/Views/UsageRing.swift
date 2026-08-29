@@ -4,14 +4,14 @@ import SideNotchCore
 /// Reusable provider ring: a glyph inside a dark disc, ringed by a usage arc, with the
 /// percentage beneath.
 ///
-/// Colour comes from `UsageState`, which `UsageStateEvaluator` derives from the user's
+/// Colour comes from `UsageState`, which `UsageLevelEvaluator` derives from the user's
 /// configured thresholds. The ring holds no threshold logic of its own, so it cannot
 /// disagree with the alerts.
 struct UsageRing: View {
-    let state: UsageState
+    let state: ProviderDisplayState
     /// 0...1, or nil when the provider reports no measurement.
     let fraction: Double?
-    let provider: ProviderID
+    let provider: ProviderType
     var diameter: CGFloat
     var lineWidth: CGFloat
     var glyphSize: CGFloat

@@ -6,7 +6,7 @@ import ProviderKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
-    private var store: UsageStore!
+    private var store: UsageManager!
     private var controller: NotchWindowController!
     private var placement: DisplayPlacementService!
     private var notifications: NotificationService!
@@ -26,12 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fixture runs get an in-memory cache. Sharing the real one let a mock render write
         // figures that then outlived it, because a provider whose fetch fails keeps
         // whatever the cache last held.
-        let cache = SnapshotCache(inMemory: usingMocks)
+        let cache = UsageCache(inMemory: usingMocks)
 
         let providerOverride: [any UsageProvider]? =
             usingMocks ? MockUsageProvider.showcase() : nil
 
-        store = UsageStore(
+        store = UsageManager(
             settings: settings, cache: cache, notifications: notifications,
             providerOverride: providerOverride
         )
@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task {
                 await store.refreshAll()
                 let focused = environment["SIDENOTCH_RENDER_FOCUS"]
-                    .flatMap(ProviderID.init(rawValue:))
+                    .flatMap(ProviderType.init(rawValue:))
                 PreviewRenderer.render(
                     to: path, store: store, settings: settings,
                     notch: placement.notch, selected: focused,

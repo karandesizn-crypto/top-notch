@@ -1,0 +1,324 @@
+import Foundation
+import Observation
+import SideNotchCore
+import ProviderKit
+
+/// How a provider should be drawn.
+///
+/// A presentation concern, deliberately separate from the domain's `UsageStatus` and
+/// `UsageLevel`: several distinct statuses share one visual treatment. `.unsupported`,
+/// `.unavailable` and `.error` all render inert — what tells them apart is the message,
+/// not the colour.
+enum ProviderDisplayState: String, Sendable {
+    case normal, warning, critical, exhausted, unavailable, loading
+
+    /// Whether figures should be drawn.
+    var hasMeasurement: Bool {
+        switch self {
+        case .normal, .warning, .critical, .exhausted: true
+        case .unavailable, .loading: false
+        }
+    }
+
+    init(status: UsageStatus, level: UsageLevel?) {
+        switch status {
+        case .loading:
+            self = .loading
+        case .available:
+            switch level {
+            case .normal?: self = .normal
+            case .warning?: self = .warning
+            case .critical?: self = .critical
+            case .exhausted?: self = .exhausted
+            case nil: self = .unavailable
+            }
+        case .unavailable, .unsupported, .error:
+            self = .unavailable
+        }
+    }
+}
+
+/// What the UI knows about one provider.
+struct ProviderStatus: Identifiable, Sendable {
+    let provider: ProviderType
+    let displayName: String
+    /// The last state received, whatever its status or source.
+    var usage: UsageState
+    var isRefreshing: Bool
+
+    var id: ProviderType { provider }
+
+    var state: ProviderDisplayState {
+        ProviderDisplayState(status: usage.status, level: usage.level)
+    }
+
+    var headlineWindow: UsageWindow? { usage.headlineWindow }
+
+    /// Where the figures came from, so the UI never has to infer it.
+    var source: UsageSource { usage.source }
+    var status: UsageStatus { usage.status }
+
+    /// One-line explanation for the expanded view.
+    var statusMessage: String? {
+        if let failure = usage.failure { return failure }
+        if usage.status == .available && usage.windows.isEmpty {
+            return "No metered limits on this plan"
+        }
+        return nil
+    }
+}
+
+/// Owns the providers and holds what the UI renders.
+///
+/// Three properties matter: a failing provider never blocks another, a failure never
+/// discards the last good reading, and nothing here blocks the main thread — provider work
+/// happens off it and only the result is published.
+@Observable
+@MainActor
+final class UsageManager {
+    private(set) var statuses: [ProviderType: ProviderStatus] = [:]
+    private(set) var lastRefresh: Date?
+    /// Ticks so countdowns re-render without re-reading providers.
+    private(set) var now: Date = Date()
+
+    /// Presentation order: the built-ins, then whatever the user added. Fixed, so chips
+    /// never reshuffle under the pointer as readings arrive.
+    private(set) var order: [ProviderType] = []
+
+    let staleness = StalenessPolicy.default
+
+    /// Shortest time a refresh is allowed to appear to take: one full turn of the sweep.
+    ///
+    /// A local read can return in milliseconds, which would make the ring's sweep a flash.
+    /// Matching the sweep's own period means it completes a revolution. This delays only
+    /// the indicator; figures are published the moment they arrive.
+    static let minimumVisibleRefresh: Duration = .milliseconds(1300)
+
+    private let settings: AppSettings
+    private let cache: UsageCache
+    private let notifications: NotificationService
+    private var providers: [ProviderType: any UsageProvider] = [:]
+    private var inFlight: Set<ProviderType> = []
+    private let refreshTrigger = RefreshTrigger()
+    private var scheduler: RefreshScheduler?
+
+    init(
+        settings: AppSettings,
+        cache: UsageCache,
+        notifications: NotificationService,
+        providerOverride: [any UsageProvider]? = nil
+    ) {
+        self.settings = settings
+        self.cache = cache
+        self.notifications = notifications
+
+        let built = providerOverride ?? Self.makeProviders(settings: settings, trigger: refreshTrigger)
+        for provider in built { providers[provider.providerType] = provider }
+        order = built.map(\.providerType)
+
+        // Codex pushes `account/rateLimits/updated`; route it into a refresh so usage
+        // changes appear without waiting out the interval. The trigger box exists because
+        // providers are built before `self` is available.
+        refreshTrigger.handler = { [weak self] in await self?.refresh(.codex) }
+
+        // Restored readings arrive already marked `.cached`.
+        let cached = cache.load()
+        for id in order {
+            guard let provider = providers[id] else { continue }
+            statuses[id] = ProviderStatus(
+                provider: id,
+                displayName: provider.displayName,
+                usage: cached[id] ?? UsageState.loading(provider: id),
+                isRefreshing: false
+            )
+        }
+    }
+
+    /// Built-ins in shipped order, then one `CustomUsageProvider` per user-added tool.
+    private static func makeProviders(
+        settings: AppSettings, trigger: RefreshTrigger
+    ) -> [any UsageProvider] {
+        var providers: [any UsageProvider] = [
+            ClaudeUsageProvider(),
+            CodexUsageProvider(thresholds: settings.thresholds) { await trigger.fire() },
+            CursorUsageProvider(),
+        ]
+        for definition in settings.customProviders {
+            providers.append(
+                CustomUsageProvider(providerType: definition.providerType, displayName: definition.name)
+            )
+        }
+        return providers
+    }
+
+    // MARK: Lifecycle
+
+    func start() async {
+        guard scheduler == nil else { return }
+        for provider in providers.values { await provider.startMonitoring() }
+
+        let scheduler = RefreshScheduler(
+            interval: { [weak self] in self?.settings.refreshInterval ?? 300 },
+            tick: { [weak self] in self?.now = Date() },
+            perform: { [weak self] _ in await self?.refreshAll() }
+        )
+        self.scheduler = scheduler
+        scheduler.start()
+    }
+
+    func stop() async {
+        scheduler?.stop()
+        scheduler = nil
+        for provider in providers.values { await provider.stopMonitoring() }
+    }
+
+    /// Rebuilds the provider list after the user adds or removes one.
+    ///
+    /// Existing readings are kept, so adding a provider does not blank what is on screen.
+    func rebuildProviders() async {
+        for provider in providers.values where !ProviderType.builtIn.contains(provider.providerType) {
+            await provider.stopMonitoring()
+        }
+        let rebuilt = Self.makeProviders(settings: settings, trigger: refreshTrigger)
+        var next: [ProviderType: any UsageProvider] = [:]
+        for provider in rebuilt {
+            // Built-in adapters are reused, so the Codex app-server connection survives a
+            // settings change.
+            next[provider.providerType] = providers[provider.providerType] ?? provider
+        }
+        providers = next
+        order = rebuilt.map(\.providerType)
+
+        for provider in rebuilt where statuses[provider.providerType] == nil {
+            statuses[provider.providerType] = ProviderStatus(
+                provider: provider.providerType,
+                displayName: settings.displayName(for: provider.providerType),
+                usage: UsageState.loading(provider: provider.providerType),
+                isRefreshing: false
+            )
+        }
+        statuses = statuses.filter { order.contains($0.key) }
+    }
+
+    // MARK: Refreshing
+
+    func refreshAll() async {
+        await withTaskGroup(of: Void.self) { group in
+            for id in order where settings.isEnabled(id) {
+                group.addTask { [weak self] in await self?.refresh(id) }
+            }
+        }
+        now = Date()
+        lastRefresh = now
+    }
+
+    /// Refreshes every visible provider, one shortly after the next.
+    ///
+    /// The stagger is the point: all the rings animate, but as a cascade rather than in
+    /// unison, which reads as the surface responding rather than as a glitch.
+    func refreshAllStaggered(step: Duration = .milliseconds(90)) async {
+        await withTaskGroup(of: Void.self) { group in
+            for (index, id) in visibleProviders.enumerated() {
+                group.addTask { [weak self] in
+                    try? await Task.sleep(for: step * index)
+                    await self?.refresh(id)
+                }
+            }
+        }
+    }
+
+    /// Refreshes one provider. Safe to call concurrently; duplicates are dropped.
+    func refresh(_ id: ProviderType) async {
+        guard let provider = providers[id], !inFlight.contains(id) else { return }
+        inFlight.insert(id)
+        statuses[id]?.isRefreshing = true
+        let started = ContinuousClock.now
+        defer {
+            inFlight.remove(id)
+            statuses[id]?.isRefreshing = false
+        }
+
+        let result: UsageState
+        do {
+            result = try await provider.fetchUsage()
+        } catch let error as ProviderError {
+            result = Self.state(for: error, provider: id)
+            Log.provider.notice(
+                "\(id.rawValue, privacy: .public) \(error.status.rawValue, privacy: .public)"
+            )
+        } catch {
+            result = UsageState.failed(provider: id, reason: "Unexpected failure")
+        }
+
+        apply(result, to: id, displayName: provider.displayName)
+
+        // Hold the indicator long enough to be seen, without delaying the data — the
+        // figures above are already published by this point.
+        let elapsed = ContinuousClock.now - started
+        if elapsed < Self.minimumVisibleRefresh {
+            try? await Task.sleep(for: Self.minimumVisibleRefresh - elapsed)
+        }
+    }
+
+    /// Records a new state, keeping the last good reading when the new one carries none.
+    ///
+    /// A transient failure must not blank a figure the user was reading; a *structural*
+    /// one must, because an unsupported provider will never produce a newer reading and a
+    /// cached figure would sit there looking current forever.
+    private func apply(_ state: UsageState, to id: ProviderType, displayName: String) {
+        let previous = statuses[id]?.usage
+
+        if state.status == .available {
+            cache.save(state)
+            statuses[id]?.usage = state
+            notifications.evaluate(
+                state, displayName: displayName, enabled: settings.notificationsEnabled
+            )
+            return
+        }
+
+        let keepsPreviousFigures = state.status.isRetryable
+            && previous?.status == .available
+        statuses[id]?.usage = keepsPreviousFigures ? (previous?.asCached() ?? state) : state
+    }
+
+    private static func state(for error: ProviderError, provider: ProviderType) -> UsageState {
+        let reason = error.userFacingDescription
+        switch error.status {
+        case .unsupported: return .unsupported(provider: provider, reason: reason)
+        case .error: return .failed(provider: provider, reason: reason)
+        default: return .unavailable(provider: provider, reason: reason)
+        }
+    }
+
+    // MARK: Queries
+
+    var visibleProviders: [ProviderType] {
+        order.filter { settings.isEnabled($0) && statuses[$0] != nil }
+    }
+
+    func status(for id: ProviderType) -> ProviderStatus? { statuses[id] }
+
+    /// Whether a reading is old enough to mark. Only meaningful for figures that exist.
+    func isStale(_ id: ProviderType) -> Bool {
+        guard let usage = statuses[id]?.usage, usage.status == .available else { return false }
+        return staleness.isStale(usage, now: now)
+    }
+}
+
+/// Lets a provider signal "refresh me" before the manager that handles it exists.
+///
+/// Providers are constructed inside the manager's initializer, so they cannot capture
+/// `self`. A push arriving in that window is dropped, which is correct — the launch
+/// refresh is moments away.
+final class RefreshTrigger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _handler: (@Sendable () async -> Void)?
+
+    var handler: (@Sendable () async -> Void)? {
+        get { lock.withLock { _handler } }
+        set { lock.withLock { _handler = newValue } }
+    }
+
+    func fire() async { await handler?() }
+}

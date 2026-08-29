@@ -119,90 +119,201 @@ struct CompactResetTests {
     }
 }
 
-@Suite("Snapshot behaviour")
-struct SnapshotTests {
+@Suite("Usage state")
+struct UsageStateTests {
     let now = Date()
 
-    /// Windows are built with explicit states so these assertions test "worst wins"
-    /// rather than whatever the default thresholds happen to be.
-    private func snapshot(states windows: [(Double?, UsageState)]) -> UsageSnapshot {
-        UsageSnapshot(
-            provider: .codex,
-            windows: windows.enumerated().map { index, entry in
-                UsageWindow(
-                    id: "w\(index)", label: "w\(index)",
-                    usedFraction: entry.0, state: entry.1
-                )
-            },
-            lastUpdated: now
+    private func window(_ id: String, _ fraction: Double?) -> UsageWindow {
+        UsageWindow(
+            id: id, label: id, usedFraction: fraction,
+            level: UsageLevelEvaluator.level(forUsedFraction: fraction)
         )
-    }
-
-    private func snapshot(_ fractions: [Double?]) -> UsageSnapshot {
-        snapshot(states: fractions.map { ($0, UsageStateEvaluator.state(forUsedFraction: $0)) })
     }
 
     @Test("the headline is the most constrained window")
     func headline() throws {
-        let headline = try #require(snapshot([0.2, 0.91, 0.5]).headlineWindow)
-        #expect(headline.id == "w1")
+        let state = UsageState.live(
+            provider: .codex,
+            windows: [window("a", 0.2), window("b", 0.91), window("c", 0.5)],
+            at: now
+        )
+        #expect(state.headlineWindow?.id == "b")
+        #expect(state.usedPercentage.map { Int($0.rounded()) } == 91)
+        #expect(state.remainingPercentage.map { Int($0.rounded()) } == 9)
     }
 
-    @Test("windows without a measurement do not become the headline")
+    @Test("windows without a measurement never become the headline")
     func headlineSkipsUnmeasured() throws {
-        let headline = try #require(snapshot([nil, 0.3]).headlineWindow)
-        #expect(headline.id == "w1")
+        let state = UsageState.live(provider: .codex, windows: [window("a", nil), window("b", 0.3)], at: now)
+        #expect(state.headlineWindow?.id == "b")
     }
 
-    @Test("overall state is the worst window's state")
-    func overallState() {
-        #expect(snapshot(states: [(0.1, .normal), (0.6, .warning)]).overallState == .warning)
-        #expect(snapshot(states: [(0.1, .normal), (0.8, .critical)]).overallState == .critical)
-        #expect(snapshot(states: [(1.0, .exhausted), (0.1, .normal)]).overallState == .exhausted)
-        // An unavailable window never outranks a real measurement.
-        #expect(snapshot(states: [(nil, .unavailable), (0.6, .warning)]).overallState == .warning)
-    }
+    @Test("level is the worst window's, and only when the provider answered")
+    func level() {
+        let available = UsageState.live(
+            provider: .codex, windows: [window("a", 0.1), window("b", 0.95)], at: now
+        )
+        #expect(available.level == .critical)
 
-    @Test("an unavailable snapshot reports unavailable regardless of stale windows")
-    func unavailableSnapshot() {
-        let snapshot = UsageSnapshot.unavailable(provider: .cursor, reason: "no local data")
-        #expect(snapshot.overallState == .unavailable)
-        #expect(snapshot.availability.reason == "no local data")
-        #expect(snapshot.headlineWindow == nil)
+        // An unsupported provider has no level at all — not `.normal`, which would read
+        // as "fine".
+        #expect(UsageState.unsupported(provider: .claude, reason: "x").level == nil)
+        #expect(UsageState.unavailable(provider: .claude, reason: "x").level == nil)
+        #expect(UsageState.failed(provider: .claude, reason: "x").level == nil)
+        #expect(UsageState.loading(provider: .claude).level == nil)
     }
 
     @Test("a provider with no windows does not claim to be healthy")
     func noWindows() {
-        #expect(snapshot([]).overallState == .unavailable)
+        let state = UsageState.live(provider: .codex, windows: [], at: now)
+        #expect(state.level == nil)
+        #expect(state.hasFigures == false)
+        #expect(state.status == .available)   // an empty answer is still an answer
+    }
+}
+
+@Suite("LIVE, CACHED, UNSUPPORTED, ERROR")
+struct UsageStateSourceTests {
+    let now = Date()
+
+    private var liveState: UsageState {
+        UsageState.live(
+            provider: .codex, plan: "go",
+            windows: [UsageWindow.fromPercentage(id: "p", label: "30-day", percent: 40)],
+            at: now
+        )
     }
 
-    @Test("remaining fraction complements used fraction")
-    func remaining() {
-        let window = UsageWindow.fromPercentage(id: "p", label: "l", percent: 73)
-        #expect(abs((window.remainingFraction ?? 0) - 0.27) < 0.0001)
-        #expect(abs((window.usedPercentage ?? 0) - 73) < 0.0001)
+    @Test("LIVE carries figures, an available status, and a timestamp")
+    func live() {
+        let state = liveState
+        #expect(state.status == .available)
+        #expect(state.source == .live)
+        #expect(state.hasFigures)
+        #expect(state.lastUpdated == now)
+        #expect(state.failure == nil)
     }
 
-    @Test("a window with no measurement has no remaining fraction either")
-    func noMeasurement() {
-        let window = UsageWindow.fromPercentage(id: "p", label: "l", percent: nil)
-        #expect(window.usedFraction == nil)
-        #expect(window.remainingFraction == nil)
-        #expect(window.state == .unavailable)
+    @Test("CACHED keeps the figures but changes the source")
+    func cached() {
+        // Bound once: the factory mints a fresh id per call.
+        let live = liveState
+        let cached = live.asCached()
+        // Same measurement, different provenance — the distinction the UI needs.
+        #expect(cached.source == .cached)
+        #expect(cached.status == .available)
+        #expect(cached.usedPercentage == live.usedPercentage)
+        #expect(cached.lastUpdated == live.lastUpdated)
+        #expect(cached.id == live.id)   // identity survives, so it is the same reading
+    }
+
+    @Test("caching is idempotent and never promotes a non-live state")
+    func cachedIsIdempotent() {
+        #expect(liveState.asCached().asCached().source == .cached)
+        // Nothing was live to begin with, so nothing is claimed to have been.
+        let unsupported = UsageState.unsupported(provider: .claude, reason: "x")
+        #expect(unsupported.asCached().source == .unavailable)
+    }
+
+    @Test("UNSUPPORTED is structural and carries no figures")
+    func unsupported() {
+        let state = UsageState.unsupported(provider: .claude, reason: "No local usage API yet")
+        #expect(state.status == .unsupported)
+        #expect(state.source == .unavailable)
+        #expect(state.hasFigures == false)
+        #expect(state.failure == "No local usage API yet")
+        // Retrying will not help, which is what separates this from `.unavailable`.
+        #expect(state.status.isRetryable == false)
+    }
+
+    @Test("UNAVAILABLE is transient, and says so")
+    func unavailable() {
+        let state = UsageState.unavailable(provider: .codex, reason: "Not running")
+        #expect(state.status == .unavailable)
+        #expect(state.status.isRetryable)
+        #expect(state.hasFigures == false)
+    }
+
+    @Test("ERROR is distinct from both")
+    func error() {
+        let state = UsageState.failed(provider: .codex, reason: "Unexpected response")
+        #expect(state.status == .error)
+        #expect(state.source == .unavailable)
+        #expect(state.status.isRetryable)
+        #expect(state.hasFigures == false)
+    }
+
+    @Test("LOADING is not mistaken for a reading")
+    func loading() {
+        let state = UsageState.loading(provider: .codex)
+        #expect(state.status == .loading)
+        #expect(state.lastUpdated == nil)
+        #expect(state.hasFigures == false)
+    }
+
+    @Test("every status maps to exactly one source expectation")
+    func sourceMatchesStatus() {
+        // Only a real read is ever `.live`; everything else must not claim to be.
+        #expect(liveState.source == .live)
+        for state in [
+            UsageState.unsupported(provider: .claude, reason: "x"),
+            UsageState.unavailable(provider: .claude, reason: "x"),
+            UsageState.failed(provider: .claude, reason: "x"),
+            UsageState.loading(provider: .claude),
+        ] {
+            #expect(state.source == .unavailable)
+        }
+    }
+
+    @Test("states round-trip through Codable with source and status intact")
+    func codable() throws {
+        for original in [liveState, liveState.asCached(),
+                         UsageState.unsupported(provider: .claude, reason: "x")] {
+            let data = try JSONEncoder().encode(original)
+            let decoded = try JSONDecoder().decode(UsageState.self, from: data)
+            #expect(decoded.source == original.source)
+            #expect(decoded.status == original.status)
+            #expect(decoded.provider == original.provider)
+        }
     }
 }
 
 @Suite("Staleness")
 struct StalenessPolicyTests {
+    let policy = StalenessPolicy(maxAge: 900)
+
+    private func aged(_ seconds: TimeInterval, now: Date) -> UsageState {
+        UsageState.live(
+            provider: .codex,
+            windows: [UsageWindow.fromPercentage(id: "p", label: "p", percent: 10)],
+            at: now.addingTimeInterval(-seconds)
+        )
+    }
+
     @Test("fresh and stale either side of the max age")
     func freshAndStale() {
         let now = Date()
-        let policy = StalenessPolicy(maxAge: 900)
-        func snapshot(ageSeconds: TimeInterval) -> UsageSnapshot {
-            UsageSnapshot(provider: .codex, lastUpdated: now.addingTimeInterval(-ageSeconds))
-        }
-        #expect(policy.isStale(snapshot(ageSeconds: 300), now: now) == false)
-        #expect(policy.isStale(snapshot(ageSeconds: 1200), now: now) == true)
+        #expect(policy.isStale(aged(300, now: now), now: now) == false)
+        #expect(policy.isStale(aged(1200, now: now), now: now) == true)
+    }
+
+    @Test("a cached reading ages exactly as a live one does")
+    func cachedAges() {
+        // Restoring from disk must not reset the clock, or yesterday's figure looks fresh.
+        let now = Date()
+        let cached = aged(1200, now: now).asCached()
+        #expect(cached.source == .cached)
+        #expect(policy.isStale(cached, now: now) == true)
+        #expect(policy.age(of: cached, now: now).map { Int($0) } == 1200)
+    }
+
+    @Test("a state with no reading is not called stale")
+    func neverReadIsNotStale() {
+        // "Never read" and "read long ago" are different; only one deserves the mark.
+        let now = Date()
+        let loading = UsageState.loading(provider: .codex)
+        #expect(policy.age(of: loading, now: now) == nil)
+        #expect(policy.isStale(loading, now: now) == false)
     }
 }
 
@@ -430,26 +541,26 @@ struct NotchSurfaceLayoutTests {
 }
 
 @Suite("Provider identity")
-struct ProviderIDTests {
+struct ProviderTypeTests {
     @Test("the three built-ins are the shipped set")
     func builtIns() {
-        #expect(ProviderID.builtIn == [.claude, .codex, .cursor])
-        #expect(ProviderID.claude.isBuiltIn)
-        #expect(ProviderID("antigravity").isBuiltIn == false)
+        #expect(ProviderType.builtIn == [.claude, .codex, .cursor])
+        #expect(ProviderType.claude.isBuiltIn)
+        #expect(ProviderType("antigravity").isBuiltIn == false)
     }
 
     @Test("a custom provider is a first-class identifier")
     func customProvider() {
-        let custom = ProviderID("antigravity")
+        let custom = ProviderType("antigravity")
         #expect(custom.rawValue == "antigravity")
         #expect(custom.defaultDisplayName == "Antigravity")
     }
 
     @Test("identifiers encode as bare strings, so cached snapshots still decode")
     func codingIsStable() throws {
-        let data = try JSONEncoder().encode(ProviderID.codex)
+        let data = try JSONEncoder().encode(ProviderType.codex)
         #expect(String(data: data, encoding: .utf8) == "\"codex\"")
-        #expect(try JSONDecoder().decode(ProviderID.self, from: data) == .codex)
+        #expect(try JSONDecoder().decode(ProviderType.self, from: data) == .codex)
     }
 
     @Test(
@@ -462,7 +573,7 @@ struct ProviderIDTests {
         ]
     )
     func slugs(title: String, expected: String) {
-        #expect(ProviderID.slug(from: title) == expected)
+        #expect(ProviderType.slug(from: title) == expected)
     }
 }
 

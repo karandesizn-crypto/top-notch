@@ -16,7 +16,7 @@ import SideNotchCore
 @MainActor
 final class NotificationService {
     /// Highest state already announced for each window, keyed provider + window.
-    private var announced: [String: UsageState] = [:]
+    private var announced: [String: UsageLevel] = [:]
     private var isAuthorized = false
 
     static var isAvailable: Bool { Bundle.main.bundleIdentifier != nil }
@@ -36,31 +36,36 @@ final class NotificationService {
     }
 
     /// Notifies on escalation into warning, critical, or exhausted.
-    func evaluate(_ snapshot: UsageSnapshot, displayName: String, enabled: Bool) {
-        guard enabled, isAuthorized, Self.isAvailable else { return }
+    /// Notifies on escalation into warning, critical, or exhausted.
+    ///
+    /// Only ever called with an `.available` state, so a provider that cannot be read
+    /// never produces an alert — and a window with no measurement cannot escalate.
+    func evaluate(_ usage: UsageState, displayName: String, enabled: Bool) {
+        guard enabled, isAuthorized, Self.isAvailable, usage.status == .available else { return }
 
-        for window in snapshot.windows {
-            let key = "\(snapshot.provider.rawValue).\(window.id)"
+        for window in usage.windows {
+            guard let level = window.level else { continue }
+            let key = "\(usage.provider.rawValue).\(window.id)"
             let previous = announced[key] ?? .normal
 
-            guard window.state.severity > previous.severity,
-                  window.state == .warning || window.state == .critical || window.state == .exhausted
+            guard level.severity > previous.severity,
+                  level == .warning || level == .critical || level == .exhausted
             else {
                 // Recovery re-arms the alert for the next cycle.
-                if window.state.severity < previous.severity { announced[key] = window.state }
+                if level.severity < previous.severity { announced[key] = level }
                 continue
             }
 
-            announced[key] = window.state
-            post(for: window, provider: displayName, state: window.state)
+            announced[key] = level
+            post(for: window, provider: displayName, level: level)
         }
     }
 
-    private func post(for window: UsageWindow, provider: String, state: UsageState) {
+    private func post(for window: UsageWindow, provider: String, level: UsageLevel) {
         let content = UNMutableNotificationContent()
         let percentage = window.usedPercentage.map { "\(Int($0.rounded()))%" } ?? "—"
 
-        switch state {
+        switch level {
         case .exhausted:
             content.title = "\(provider) limit reached"
             content.body = "\(window.label) is exhausted."

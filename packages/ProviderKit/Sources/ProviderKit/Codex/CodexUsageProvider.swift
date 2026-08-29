@@ -7,7 +7,7 @@ import SideNotchCore
 /// Codex present but never signed in, and Codex signed in but its app-server unreachable
 /// are three different messages.
 public final class CodexUsageProvider: UsageProvider, @unchecked Sendable {
-    public let id: ProviderID = .codex
+    public let providerType: ProviderType = .codex
     public let displayName = "Codex"
 
     private let client: CodexAppServerClient
@@ -25,7 +25,7 @@ public final class CodexUsageProvider: UsageProvider, @unchecked Sendable {
         self.onRateLimitsChanged = onRateLimitsChanged
     }
 
-    public func start() async {
+    public func startMonitoring() async {
         guard let onRateLimitsChanged else { return }
         await client.setNotificationHandler { method in
             guard method == CodexAppServerClient.Method.rateLimitsUpdated else { return }
@@ -34,11 +34,11 @@ public final class CodexUsageProvider: UsageProvider, @unchecked Sendable {
         }
     }
 
-    public func stop() async {
+    public func stopMonitoring() async {
         await client.stop()
     }
 
-    public func fetchSnapshot() async throws -> UsageSnapshot {
+    public func fetchUsage() async throws -> UsageState {
         guard CodexInstallation.isInstalled else { throw ProviderError.notInstalled }
         guard CodexInstallation.hasStoredAuth() else { throw ProviderError.authenticationRequired }
 
@@ -63,10 +63,10 @@ public final class CodexUsageProvider: UsageProvider, @unchecked Sendable {
             as: GetAccountTokenUsageResponse.self
         )
 
-        let snapshot = CodexSnapshotMapper.snapshot(
+        let state = CodexSnapshotMapper.snapshot(
             from: response, tokenUsage: tokenUsage, thresholds: thresholds
         )
-        Log.codex.debug("read \(snapshot.windows.count) usage window(s)")
-        return snapshot
+        Log.codex.debug("read \(state.windows.count) usage window(s)")
+        return state
     }
 }

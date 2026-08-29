@@ -164,7 +164,7 @@ enum CursorGeometry {
 /// Falling back to the drawn vector, and finally to an SF Symbol for a tool SideNotch has
 /// no mark for.
 struct ProviderLogo: View {
-    let provider: ProviderID
+    let provider: ProviderType
     let size: CGFloat
     var tint: Color = .white
 
@@ -222,7 +222,7 @@ struct ProviderLogo: View {
     /// Cached so a missing file is not re-checked on every render pass.
     private static let cache = SuppliedLogoCache()
 
-    static func suppliedImage(for provider: ProviderID) -> NSImage? {
+    static func suppliedImage(for provider: ProviderType) -> NSImage? {
         cache.image(for: provider)
     }
 }
@@ -232,7 +232,7 @@ private final class SuppliedLogoCache: @unchecked Sendable {
     private let lock = NSLock()
     private var loaded: [String: NSImage?] = [:]
 
-    func image(for provider: ProviderID) -> NSImage? {
+    func image(for provider: ProviderType) -> NSImage? {
         lock.lock()
         defer { lock.unlock() }
         if let cached = loaded[provider.rawValue] { return cached }

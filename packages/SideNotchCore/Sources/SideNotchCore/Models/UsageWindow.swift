@@ -14,7 +14,7 @@ public struct UsageWindow: Codable, Sendable, Identifiable, Equatable {
     public let resetDate: Date?
     /// Length of this window, when the provider states it.
     public let duration: TimeInterval?
-    public let state: UsageState
+    public let level: UsageLevel?
 
     public init(
         id: String,
@@ -22,14 +22,14 @@ public struct UsageWindow: Codable, Sendable, Identifiable, Equatable {
         usedFraction: Double?,
         resetDate: Date? = nil,
         duration: TimeInterval? = nil,
-        state: UsageState
+        level: UsageLevel?
     ) {
         self.id = id
         self.label = label
         self.usedFraction = usedFraction.map { UsageWindow.normalize($0) }
         self.resetDate = resetDate
         self.duration = duration
-        self.state = state
+        self.level = level
     }
 
     public var remainingFraction: Double? {
@@ -70,7 +70,7 @@ public struct UsageWindow: Codable, Sendable, Identifiable, Equatable {
             usedFraction: fraction,
             resetDate: resetDate,
             duration: duration,
-            state: UsageStateEvaluator.state(forUsedFraction: fraction, thresholds: thresholds)
+            level: UsageLevelEvaluator.level(forUsedFraction: fraction, thresholds: thresholds)
         )
     }
 }

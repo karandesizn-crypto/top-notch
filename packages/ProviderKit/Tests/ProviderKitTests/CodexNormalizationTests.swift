@@ -24,7 +24,7 @@ struct CodexNormalizationTests {
         #expect(window.usedFraction == 0)
         #expect(window.label == "30-day")          // derived from windowDurationMins 43200
         #expect(window.duration == 2_592_000)   // 43200 minutes
-        #expect(window.state == .normal)
+        #expect(window.level == .normal)
         #expect(snapshot.credits?.resetCreditsAvailable == 1)
     }
 
@@ -54,9 +54,9 @@ struct CodexNormalizationTests {
     func emptyResponse() throws {
         let snapshot = CodexSnapshotMapper.snapshot(from: try decodeFixture("rate-limits-empty"))
         #expect(snapshot.windows.isEmpty)
-        #expect(snapshot.availability == .available)
+        #expect(snapshot.status == .available)
         #expect(snapshot.plan == nil)
-        #expect(snapshot.overallState == .unavailable)
+        #expect(snapshot.level == nil)
     }
 
     @Test("a window with no duration falls back to a generic label rather than guessing")
@@ -66,7 +66,7 @@ struct CodexNormalizationTests {
         #expect(primary.label == "Current window")
         #expect(primary.duration == nil)
         #expect(primary.resetDate == nil)
-        #expect(primary.state == .critical)         // 96%
+        #expect(primary.level == .critical)         // 96%
     }
 
     @Test("a spend control becomes its own window")
@@ -87,10 +87,10 @@ struct CodexNormalizationTests {
     }
 }
 
-@Suite("Usage state thresholds")
-struct UsageStateTests {
+@Suite("Usage level thresholds")
+struct UsageLevelTests {
     // Precomputed: the compiler cannot type-check arithmetic inside `arguments`.
-    static let boundaryCases: [(Double, UsageState)] = [
+    static let boundaryCases: [(Double, UsageLevel)] = [
         (0.0, .normal), (0.21, .normal), (0.49, .normal),
         (0.50, .warning), (0.52, .warning), (0.69, .warning),
         (0.70, .critical), (0.73, .critical), (0.99, .critical),
@@ -98,14 +98,14 @@ struct UsageStateTests {
     ]
 
     /// The boundaries encode the reference design: 21% calm, 52% noticed, 73% hot.
-    @Test("state boundaries", arguments: UsageStateTests.boundaryCases)
-    func boundaries(fraction: Double, expected: UsageState) {
-        #expect(UsageStateEvaluator.state(forUsedFraction: fraction) == expected)
+    @Test("state boundaries", arguments: UsageLevelTests.boundaryCases)
+    func boundaries(fraction: Double, expected: UsageLevel) {
+        #expect(UsageLevelEvaluator.level(forUsedFraction: fraction) == expected)
     }
 
-    @Test("an absent measurement is unavailable, never normal")
+    @Test("an absent measurement has no level, never normal")
     func absentIsUnavailable() {
-        #expect(UsageStateEvaluator.state(forUsedFraction: nil) == .unavailable)
+        #expect(UsageLevelEvaluator.level(forUsedFraction: nil) == nil)
     }
 
     @Test("fractions are clamped so a ring cannot exceed a full turn")
@@ -116,7 +116,7 @@ struct UsageStateTests {
         // Over-100% still reads as exhausted, and the ring stays full.
         let window = UsageWindow.fromPercentage(id: "p", label: "x", percent: 140)
         #expect(window.usedFraction == 1)
-        #expect(window.state == .exhausted)
+        #expect(window.level == .exhausted)
     }
 }
 
@@ -144,14 +144,20 @@ struct ProviderErrorTests {
     @Test("stub providers report unsupported with a reason")
     func stubs() async {
         for provider: any UsageProvider in [ClaudeUsageProvider(), CursorUsageProvider()] {
-            await #expect(throws: ProviderError.self) { try await provider.fetchSnapshot() }
+            // Stubs report unsupported rather than throwing, so the UI can say why.
+            let state = try? await provider.fetchUsage()
+            #expect(state?.status == .unsupported)
         }
     }
 
-    @Test("mock failure surfaces through the protocol")
-    func mockFailure() async throws {
-        let cursor = try #require(MockUsageProvider.showcase().first { $0.id == .cursor })
-        await #expect(throws: ProviderError.self) { try await cursor.fetchSnapshot() }
+    @Test("mock unsupported surfaces through the protocol")
+    func mockUnsupported() async throws {
+        let cursor = try #require(
+            MockUsageProvider.showcase().first { $0.providerType == .cursor }
+        )
+        let state = try await cursor.fetchUsage()
+        #expect(state.status == .unsupported)
+        #expect(state.source == .unavailable)
     }
 }
 
@@ -206,5 +212,74 @@ struct CodexTokenUsageTests {
         #expect(snapshot.metadata["tokensToday"] == nil)
         #expect(snapshot.windows.count == 1)
         #expect(snapshot.plan == "go")
+    }
+}
+
+@Suite("Provider states reach the boundary correctly")
+struct ProviderStateContractTests {
+
+    @Test("Codex produces a LIVE state with a timestamp")
+    func codexIsLive() throws {
+        let url = Bundle.module.resourceURL!
+            .appendingPathComponent("Fixtures/rate-limits-primary-only.json")
+        let response = try JSONDecoder().decode(
+            GetAccountRateLimitsResponse.self, from: Data(contentsOf: url)
+        )
+        let state = CodexSnapshotMapper.snapshot(from: response)
+
+        #expect(state.status == .available)
+        #expect(state.source == .live)      // a real read, and it says so
+        #expect(state.lastUpdated != nil)
+        #expect(state.failure == nil)
+        #expect(state.hasFigures)
+    }
+
+    @Test("stubs produce UNSUPPORTED, never a fabricated reading")
+    func stubsAreUnsupported() async throws {
+        for provider: any UsageProvider in [ClaudeUsageProvider(), CursorUsageProvider()] {
+            let state = try await provider.fetchUsage()
+            #expect(state.status == .unsupported)
+            #expect(state.source == .unavailable)
+            #expect(state.hasFigures == false)
+            #expect(state.windows.isEmpty)
+            // A reason the UI can show, rather than an empty gap.
+            #expect(state.failure?.isEmpty == false)
+        }
+    }
+
+    @Test("a user-added tool is unsupported, not broken")
+    func customIsUnsupported() async throws {
+        let provider = CustomUsageProvider(
+            providerType: ProviderType("antigravity"), displayName: "Antigravity"
+        )
+        let state = try await provider.fetchUsage()
+        #expect(state.status == .unsupported)
+        #expect(state.provider == ProviderType("antigravity"))
+    }
+
+    @Test(
+        "provider errors map onto the right status",
+        arguments: [
+            (ProviderError.unsupported(reason: "x"), UsageStatus.unsupported),
+            (.notInstalled, .unavailable),
+            (.notRunning, .unavailable),
+            (.authenticationRequired, .unavailable),
+            (.network(detail: "x"), .unavailable),
+            (.invalidResponse(detail: "x"), .error),
+            (.unknown(detail: "x"), .error),
+        ]
+    )
+    func errorStatuses(error: ProviderError, expected: UsageStatus) {
+        // `.unsupported` must stay separate from the retryable failures: it is a statement
+        // about the provider, not about this attempt.
+        #expect(error.status == expected)
+    }
+
+    @Test("only unsupported is non-retryable")
+    func retryability() {
+        #expect(ProviderError.unsupported(reason: "x").status.isRetryable == false)
+        for error: ProviderError in [.notRunning, .network(detail: "x"), .unknown(detail: "x")] {
+            #expect(error.status.isRetryable)
+        }
     }
 }

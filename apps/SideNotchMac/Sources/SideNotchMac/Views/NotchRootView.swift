@@ -13,7 +13,7 @@ final class NotchSurfaceState {
     /// Set by a click. A pinned surface stays open when the pointer leaves, and is
     /// dismissed by Escape or another click.
     var isPinned = false
-    var selected: ProviderID = .codex
+    var selected: ProviderType = .codex
 }
 
 /// The notch surface: a compact tab hanging below the camera housing that opens into a
@@ -24,7 +24,7 @@ final class NotchSurfaceState {
 /// larger row. Nothing moves on expand; content is only revealed beneath, which is what
 /// makes it read as one surface changing shape.
 struct NotchRootView: View {
-    @Bindable var store: UsageStore
+    @Bindable var store: UsageManager
     @Bindable var settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout
@@ -41,11 +41,11 @@ struct NotchRootView: View {
     ///
     /// The sweep is animation only. Hovering is passive and constant, and performing a real
     /// refresh on it would hammer the providers' local interfaces for no benefit.
-    @State private var hoverSweepProvider: ProviderID?
+    @State private var hoverSweepProvider: ProviderType?
     @State private var hoverSweepTask: Task<Void, Never>?
 
     private var expanded: Bool { surface.isExpanded }
-    private var providers: [ProviderID] { store.visibleProviders }
+    private var providers: [ProviderType] { store.visibleProviders }
     private var status: ProviderStatus? { store.status(for: surface.selected) }
 
     private var minimized: Bool { surface.isMinimized }
@@ -161,7 +161,7 @@ struct NotchRootView: View {
     /// state, and the answer to "is my usage okay?" at a glance.
     /// Items in the provider row: one per provider, then the add button.
     private enum RowItem: Hashable {
-        case provider(ProviderID)
+        case provider(ProviderType)
         case add
     }
 
@@ -200,7 +200,7 @@ struct NotchRootView: View {
         .accessibilityLabel("Add a tool")
     }
 
-    private func chip(_ provider: ProviderID) -> some View {
+    private func chip(_ provider: ProviderType) -> some View {
         let providerStatus = store.status(for: provider)
         let isSelected = expanded && provider == surface.selected
 
@@ -298,21 +298,21 @@ struct NotchRootView: View {
     /// Only what the provider actually reported — an absent field is omitted rather than
     /// shown empty, so this line is short or missing entirely for a sparse provider.
     private var pinnedDetail: String? {
-        guard let snapshot = status?.snapshot else { return nil }
+        guard let usage = status?.usage else { return nil }
         var parts: [String] = []
 
-        if let plan = snapshot.plan { parts.append(plan.uppercased()) }
+        if let plan = usage.plan { parts.append(plan.uppercased()) }
 
         // The window the headline is not already showing.
-        if let other = snapshot.windows.first(where: { $0.id != status?.headlineWindow?.id }),
+        if let other = usage.windows.first(where: { $0.id != status?.headlineWindow?.id }),
            let percentage = other.usedPercentage {
             parts.append("\(other.label) \(Int(percentage.rounded()))%")
         }
 
-        if let credits = snapshot.credits?.resetCreditsAvailable, credits > 0 {
+        if let credits = usage.credits?.resetCreditsAvailable, credits > 0 {
             parts.append("\(credits) reset credit\(credits == 1 ? "" : "s")")
         }
-        if let raw = snapshot.metadata["tokensToday"], let tokens = Int64(raw), tokens > 0 {
+        if let raw = usage.metadata["tokensToday"], let tokens = Int64(raw), tokens > 0 {
             parts.append(Self.formatTokens(tokens) + " today")
         }
 
@@ -359,12 +359,12 @@ struct NotchRootView: View {
     ///
     /// Re-entering the same ring while it is already sweeping is ignored, so resting the
     /// pointer does not restart it. Moving to a different ring hands the sweep over.
-    private func startHoverSweep(_ provider: ProviderID) {
+    private func startHoverSweep(_ provider: ProviderType) {
         guard !reduceMotion, hoverSweepProvider != provider else { return }
         hoverSweepProvider = provider
         hoverSweepTask?.cancel()
         hoverSweepTask = Task {
-            try? await Task.sleep(for: UsageStore.minimumVisibleRefresh)
+            try? await Task.sleep(for: UsageManager.minimumVisibleRefresh)
             guard !Task.isCancelled else { return }
             if hoverSweepProvider == provider { hoverSweepProvider = nil }
         }
@@ -376,7 +376,7 @@ struct NotchRootView: View {
     /// true?", and the sweep answers that the question was heard even when the figures come
     /// back unchanged. All the rings animate rather than only the one clicked, staggered so
     /// it reads as a cascade rather than a glitch — one click refreshes the lot.
-    private func activate(_ provider: ProviderID) {
+    private func activate(_ provider: ProviderType) {
         withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
             surface.selected = provider
             surface.isExpanded = true
@@ -411,7 +411,7 @@ struct NotchRootView: View {
     }
 }
 
-private extension UsageState {
+private extension ProviderDisplayState {
     /// Spoken form for accessibility labels.
     var spokenDescription: String {
         switch self {

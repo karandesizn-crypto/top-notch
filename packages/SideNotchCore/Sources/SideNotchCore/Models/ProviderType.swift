@@ -5,7 +5,7 @@ import Foundation
 /// A string wrapper rather than an enum, so a user can add a tool SideNotch has never heard
 /// of — Antigravity, an internal gateway, whatever — without a code change. Built-ins are
 /// static constants, which keeps `.codex` reading exactly as it did when this was an enum.
-public struct ProviderID: RawRepresentable, Codable, Hashable, Sendable, Identifiable {
+public struct ProviderType: RawRepresentable, Codable, Hashable, Sendable, Identifiable {
     public let rawValue: String
 
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -15,12 +15,12 @@ public struct ProviderID: RawRepresentable, Codable, Hashable, Sendable, Identif
 
     // MARK: Built-ins
 
-    public static let claude = ProviderID("claude")
-    public static let codex = ProviderID("codex")
-    public static let cursor = ProviderID("cursor")
+    public static let claude = ProviderType("claude")
+    public static let codex = ProviderType("codex")
+    public static let cursor = ProviderType("cursor")
 
     /// The three providers that ship with an adapter, in presentation order.
-    public static let builtIn: [ProviderID] = [.claude, .codex, .cursor]
+    public static let builtIn: [ProviderType] = [.claude, .codex, .cursor]
 
     public var isBuiltIn: Bool { Self.builtIn.contains(self) }
 

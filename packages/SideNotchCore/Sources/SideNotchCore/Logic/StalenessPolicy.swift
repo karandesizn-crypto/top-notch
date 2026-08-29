@@ -14,11 +14,14 @@ public struct StalenessPolicy: Sendable {
         self.maxAge = maxAge
     }
 
-    public func isStale(_ snapshot: UsageSnapshot, now: Date = Date()) -> Bool {
-        now.timeIntervalSince(snapshot.lastUpdated) > maxAge
+    public func isStale(_ state: UsageState, now: Date = Date()) -> Bool {
+        guard let age = age(of: state, now: now) else { return false }
+        return age > maxAge
     }
 
-    public func age(of snapshot: UsageSnapshot, now: Date = Date()) -> TimeInterval {
-        now.timeIntervalSince(snapshot.lastUpdated)
+    /// Nil when the state carries no figures, so "never read" is not mistaken for "fresh".
+    public func age(of state: UsageState, now: Date = Date()) -> TimeInterval? {
+        guard let lastUpdated = state.lastUpdated else { return nil }
+        return now.timeIntervalSince(lastUpdated)
     }
 }
