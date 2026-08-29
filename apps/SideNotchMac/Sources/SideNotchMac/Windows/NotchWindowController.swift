@@ -26,7 +26,7 @@ final class NotchWindowController {
         self.settings = settings
         self.placement = placement
 
-        let layout = Self.layout(store: store, settings: settings)
+        let layout = Self.layout(store: store, settings: settings, placement: placement)
         window = NotchWindow(contentRect: NSRect(origin: .zero, size: layout.windowSize))
 
         let container = PassthroughContentView(
@@ -139,16 +139,19 @@ final class NotchWindowController {
     /// Layout for the current provider count and preferences.
     ///
     /// Static so the initializer can call it before `self` exists.
-    private static func layout(store: UsageStore, settings: AppSettings) -> NotchSurfaceLayout {
+    private static func layout(
+        store: UsageStore, settings: AppSettings, placement: DisplayPlacementService
+    ) -> NotchSurfaceLayout {
         SurfaceSizing.layout(
             providerCount: store.visibleProviders.count,
+            notch: placement.notch,
             showsFigures: settings.showPercentages,
             showsAddButton: settings.canAddProvider
         )
     }
 
     private func currentLayout() -> NotchSurfaceLayout {
-        Self.layout(store: store, settings: settings)
+        Self.layout(store: store, settings: settings, placement: placement)
     }
 
     /// Placement summary, for verifying multi-display behaviour without a screenshot.

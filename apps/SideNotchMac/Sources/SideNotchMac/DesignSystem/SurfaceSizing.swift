@@ -12,10 +12,12 @@ enum SurfaceSizing {
     static let chipWidthWithFigure: CGFloat = 58
 
     static func layout(
-        providerCount: Int, showsFigures: Bool, showsAddButton: Bool
+        providerCount: Int, notch: NotchMetrics, showsFigures: Bool, showsAddButton: Bool
     ) -> NotchSurfaceLayout {
         NotchSurfaceLayout(
             providerCount: providerCount,
+            notchWidth: notch.notchWidth,
+            notchHeight: notch.notchHeight,
             showsAddButton: showsAddButton,
             chipWidth: showsFigures ? chipWidthWithFigure : ringOnlyChipWidth,
             flare: Tokens.Surface.flare

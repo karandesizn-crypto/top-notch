@@ -16,16 +16,28 @@ Every dimension of the *anchor* comes from the display, measured at runtime thro
   `auxiliaryTopRightArea` — the housing is whatever those two areas do not cover. On the
   machine this was developed against that is 185pt, centred at x=756.
 - **Housing height** from `NSScreen.safeAreaInsets.top` — 32pt, where the menu bar is 22pt.
-- **Anchor** at the housing's *lower* edge, so the tab reads as the dark strip above
-  continuing downward.
+- **Anchor** at the very top of the display, so the collapsed surface *occupies the notch
+  row* rather than hanging below it. Its height matches the housing exactly and its chips
+  sit either side of the camera, which is what makes it read as part of the notch.
 
-The tab's own size is a design token, not hardware-derived: it hangs below the housing
-rather than fitting around it, so it does not need to know how wide the housing is.
+The housing's width is a hole in the layout, not a spacer with something behind it: nothing
+can render over the camera, so the row reserves its measured width and splits the chips
+around it — the extra one going left when the count is odd.
 
 ### Displays without a housing
 
-`safeAreaInsets.top` is zero, so the tab anchors to the bottom of the menu bar instead.
-Same shape, same behaviour, nothing covered.
+`safeAreaInsets.top` is zero, so the surface anchors to the *bottom* of the menu bar and
+hangs below it instead. Occupying the menu bar row there would cover real menu items, since
+a non-notched Mac has no dead zone in the middle to borrow. The reserved housing width
+becomes zero and the two flanks meet, giving one contiguous row.
+
+### What this costs
+
+Sitting in the notch row means the surface is drawn over the menu bar either side of the
+camera. That area is normally empty — menus end well to the left and status items begin
+well to the right — but an app with many menus, or many status items, can reach under it.
+Clicks pass through everywhere the surface is *not* drawn, so only the strip it actually
+covers is affected.
 
 ## States
 
@@ -34,12 +46,13 @@ Same shape, same behaviour, nothing covered.
 One ring per provider, plus a `+` to add another. Nothing else.
 
 ```
-     ╭────────────────────╮
-     │  ◔   ◔   ◔    +    │
-     ╰────────────────────╯
+     ╭─────┬─────────┬─────╮
+     │ ◔ ◔ │ camera  │ ◔ + │
+     ╰─────┴─────────┴─────╯
 ```
 
-**158×30pt** with three tools. It answers one question — *is my usage okay?* — and the
+**343×32pt** with three tools, of which 185pt is the camera housing itself — so it adds
+about 79pt either side of the notch. It answers one question — *is my usage okay?* — and the
 ring's colour answers it without needing a figure. Turning on "show percentages" widens
 every chip from 30pt to 58pt, which is why it is off by default: the collapsed tab's whole
 job is to be small.

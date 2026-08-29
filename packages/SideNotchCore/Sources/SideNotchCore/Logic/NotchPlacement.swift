@@ -53,10 +53,13 @@ public struct NotchMetrics: Sendable, Equatable {
     public let centerX: CGFloat
     /// The y the surface's top edge anchors to, in AppKit screen coordinates.
     ///
-    /// The surface hangs *below* the top chrome rather than straddling it: on a notched
-    /// display that is the bottom edge of the camera housing, and without a housing it is
-    /// the bottom of the menu bar. Both read as the dark strip above continuing downward,
-    /// and neither covers menu bar items.
+    /// On a display with a housing this is the very top, so the surface occupies the notch
+    /// row itself and content sits either side of the camera — the surface reads as part of
+    /// the notch rather than something hanging off it.
+    ///
+    /// Without a housing it is the bottom of the menu bar instead. Occupying the menu bar
+    /// row there would cover real menu items, since a non-notched Mac has no dead zone in
+    /// the middle to borrow.
     public let anchorTopY: CGFloat
     public let backingScaleFactor: CGFloat
 
@@ -101,8 +104,7 @@ public enum NotchPlacement {
             notchWidth: notchWidth,
             notchHeight: display.safeAreaTop,
             centerX: centerX,
-            // Below the housing, not the top of the display.
-            anchorTopY: display.frame.maxY - display.safeAreaTop,
+            anchorTopY: display.frame.maxY,
             backingScaleFactor: display.backingScaleFactor
         )
     }

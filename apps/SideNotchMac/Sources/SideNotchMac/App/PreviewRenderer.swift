@@ -21,6 +21,7 @@ enum PreviewRenderer {
     ) {
         let layout = SurfaceSizing.layout(
             providerCount: store.visibleProviders.count,
+            notch: notch,
             showsFigures: settings.showPercentages,
             showsAddButton: settings.canAddProvider
         )
@@ -32,7 +33,7 @@ enum PreviewRenderer {
 
         let canvasWidth: CGFloat = 760
         let chromeHeight = notch.notchHeight
-        let canvasHeight = chromeHeight + layout.maximumExpandedSize.height + 70
+        let canvasHeight = layout.maximumExpandedSize.height + 70
 
         let content = ZStack(alignment: .top) {
             LinearGradient(
@@ -44,12 +45,12 @@ enum PreviewRenderer {
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
 
-            // The chrome the tab hangs from: the menu bar row, with the camera housing
-            // drawn opaque at its centre.
+            // The menu bar row with the camera housing at its centre. The surface occupies
+            // this row rather than hanging below it, so it is drawn on top.
             VStack(spacing: 0) {
                 ZStack {
                     Rectangle()
-                        .fill(.black.opacity(notch.hasPhysicalNotch ? 0.92 : 0.55))
+                        .fill(.black.opacity(notch.hasPhysicalNotch ? 0.55 : 0.55))
                         .frame(height: chromeHeight)
                     if notch.hasPhysicalNotch {
                         Rectangle()
@@ -57,9 +58,10 @@ enum PreviewRenderer {
                             .frame(width: notch.notchWidth, height: chromeHeight)
                     }
                 }
-                NotchRootView(store: store, settings: settings, surface: state, layout: layout)
                 Spacer(minLength: 0)
             }
+
+            NotchRootView(store: store, settings: settings, surface: state, layout: layout)
         }
         .frame(width: canvasWidth, height: canvasHeight)
         .environment(\.colorScheme, .dark)

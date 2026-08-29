@@ -103,17 +103,40 @@ struct NotchRootView: View {
 
     /// One chip per provider: a small ring and its figure. This is the entire collapsed
     /// state, and the answer to "is my usage okay?" at a glance.
+    /// Items in the collapsed row: one per provider, then the add button.
+    private enum RowItem: Hashable {
+        case provider(ProviderID)
+        case add
+    }
+
+    private var rowItems: [RowItem] {
+        providers.map(RowItem.provider) + (layout.showsAddButton ? [.add] : [])
+    }
+
+    /// The collapsed row spans the camera housing, with items either side of it.
+    ///
+    /// The middle is a hole, not a spacer with something behind it: nothing can render over
+    /// the housing, so the layout reserves its exact measured width and the chips split
+    /// around it.
     private var chipRow: some View {
-        HStack(spacing: Tokens.Surface.chipSpacing) {
-            ForEach(providers) { provider in
-                chip(provider)
-            }
-            if layout.showsAddButton {
-                addButton
-            }
+        let items = rowItems
+        let split = min(layout.leadingItemCount, items.count)
+
+        return HStack(spacing: Tokens.Surface.chipSpacing) {
+            ForEach(items.prefix(split), id: \.self) { item($0) }
+            Color.clear.frame(width: layout.notchWidth)
+            ForEach(items.dropFirst(split), id: \.self) { item($0) }
         }
         .padding(.horizontal, layout.horizontalPadding + layout.flare)
         .frame(height: layout.collapsedHeight)
+    }
+
+    @ViewBuilder
+    private func item(_ item: RowItem) -> some View {
+        switch item {
+        case .provider(let provider): chip(provider)
+        case .add: addButton
+        }
     }
 
     private var addButton: some View {

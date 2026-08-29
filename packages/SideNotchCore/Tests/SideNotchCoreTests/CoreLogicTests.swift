@@ -189,8 +189,8 @@ struct NotchPlacementTests {
         #expect(metrics.centerX == 756)
         #expect(metrics.notchMinX == 663.5)
         #expect(metrics.notchMaxX == 848.5)
-        // Hangs below the housing rather than straddling it.
-        #expect(metrics.anchorTopY == 950)          // 982 - 32
+        // The surface occupies the notch row itself, so it anchors to the very top.
+        #expect(metrics.anchorTopY == 982)
     }
 
     @Test("a display without a housing hangs below the menu bar")
@@ -203,25 +203,26 @@ struct NotchPlacementTests {
         #expect(metrics.anchorTopY == 1415)
     }
 
-    @Test("the surface centres on the housing and hangs from its lower edge")
+    @Test("the surface centres on the housing and fills the notch row")
     func surfaceOnNotchedDisplay() {
         let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
         let frame = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 220, height: 30), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 340, height: 32), metrics: metrics, display: Self.notchedDisplay
         )
         #expect(frame.midX == 756)                  // centred on the housing
-        #expect(frame.maxY == 950)                  // flush with the housing's lower edge
-        #expect(frame.height == 30)
+        #expect(frame.maxY == 982)                  // flush with the top of the display
+        // Exactly the housing's height, so it sits inside the notch row.
+        #expect(frame.minY == 950)
     }
 
     @Test("expanding grows downward and keeps the top edge pinned")
     func expansionGrowsDownward() {
         let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
         let collapsed = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 220, height: 30), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 340, height: 32), metrics: metrics, display: Self.notchedDisplay
         )
         let expanded = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 322, height: 200), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 340, height: 200), metrics: metrics, display: Self.notchedDisplay
         )
         #expect(collapsed.maxY == expanded.maxY)    // the anchor never moves
         #expect(expanded.minY < collapsed.minY)     // it grows down
@@ -273,44 +274,61 @@ struct NotchPlacementTests {
 
 @Suite("Notch surface layout")
 struct NotchSurfaceLayoutTests {
-    let three = NotchSurfaceLayout(providerCount: 3)
+    /// Three tools on the measured 185x32 housing.
+    let three = NotchSurfaceLayout(providerCount: 3, notchWidth: 185, notchHeight: 32)
 
-    @Test("the collapsed tab is only as wide as its providers need")
-    func collapsedWidthFollowsProviderCount() {
-        #expect(three.collapsedSize.height == 30)
-        // Three 30pt chips, a 26pt add button, 11pt padding and a 10pt flare either side.
-        #expect(three.collapsedSize.width == 158)
+    /// A display with no housing: the flanks meet in the middle.
+    let flat = NotchSurfaceLayout(providerCount: 3, notchWidth: 0, notchHeight: 22)
 
-        let five = NotchSurfaceLayout(providerCount: 5)
-        #expect(five.collapsedSize.width - three.collapsedSize.width == 60)   // two chips
+    @Test("the collapsed row spans the housing with chips either side")
+    func collapsedSpansHousing() {
+        // Four items -- three rings and the add button -- split two and two.
+        #expect(three.itemWidths.count == 4)
+        #expect(three.leadingItemCount == 2)
+        #expect(three.leadingFlankWidth == 60)       // two 30pt rings
+        #expect(three.trailingFlankWidth == 56)      // one ring plus the 26pt add button
+
+        // 185 housing + 60 + 56 + 22 padding + 20 flare.
+        #expect(three.collapsedSize.width == 343)
+    }
+
+    @Test("the collapsed row is exactly the height of the housing")
+    func collapsedFillsNotchRow() {
+        // Sitting inside the notch means matching its height, not the tab's own default.
+        #expect(three.collapsedSize.height == 32)
+    }
+
+    @Test("an odd number of items puts the extra one on the left")
+    func oddSplit() {
+        let two = NotchSurfaceLayout(providerCount: 2, notchWidth: 185, notchHeight: 32)
+        #expect(two.itemWidths.count == 3)           // two rings and the add button
+        #expect(two.leadingItemCount == 2)
+        #expect(two.trailingFlankWidth == 26)        // just the add button
     }
 
     @Test("hiding the add button reclaims its width")
     func addButtonWidth() {
-        let without = NotchSurfaceLayout(providerCount: 3, showsAddButton: false)
+        let without = NotchSurfaceLayout(
+            providerCount: 3, notchWidth: 185, notchHeight: 32, showsAddButton: false
+        )
         #expect(three.collapsedSize.width - without.collapsedSize.width == 26)
+        #expect(without.itemWidths.count == 3)
     }
 
-    @Test("showing figures widens the chips rather than the padding")
-    func figuresWidenChips() {
-        let withFigures = NotchSurfaceLayout(providerCount: 3, chipWidth: 58)
-        #expect(withFigures.collapsedSize.width - three.collapsedSize.width == 84)  // 3 x 28
-    }
-
-    @Test("the collapsed tab stays compact next to the expanded panel")
-    func collapsedIsCompact() {
-        // The point of the collapsed state is that it is small; guard against it creeping.
-        #expect(three.collapsedSize.height <= 32)
-        #expect(three.collapsedSize.width < three.expandedSize(rowCount: 2).width)
+    @Test("a display with no housing loses the gap entirely")
+    func flatDisplay() {
+        #expect(flat.collapsedSize.width == three.collapsedSize.width - 185)
+        // Still tall enough to be legible where the menu bar is shorter than the tab.
+        #expect(flat.collapsedSize.height == 30)
     }
 
     @Test("expanding grows downward from the same top edge")
     func expandedSize() {
         let expanded = three.expandedSize(rowCount: 2)
-        #expect(expanded.width == 322)
         #expect(expanded.height > three.collapsedSize.height)
-        // The collapsed row remains at the top of the expanded surface.
         #expect(expanded.height == three.collapsedHeight + three.expandedBodyHeight(rowCount: 2))
+        // Never narrower than the collapsed row, so expanding cannot pinch the surface in.
+        #expect(expanded.width >= three.collapsedSize.width)
     }
 
     @Test("the body follows its content instead of opening onto empty space")
@@ -329,7 +347,9 @@ struct NotchSurfaceLayoutTests {
     @Test("the window fits every reachable state, so expanding never resizes it")
     func windowSize() {
         for count in 1...6 {
-            let layout = NotchSurfaceLayout(providerCount: count)
+            let layout = NotchSurfaceLayout(
+                providerCount: count, notchWidth: 185, notchHeight: 32
+            )
             #expect(layout.windowSize.width >= layout.collapsedSize.width)
             for rows in 0...NotchSurfaceLayout.maximumRows {
                 let size = layout.expandedSize(rowCount: rows)
@@ -339,14 +359,13 @@ struct NotchSurfaceLayoutTests {
         }
     }
 
-    @Test("many providers widen the collapsed tab past the expanded panel")
+    @Test("many providers widen the row past the expanded panel")
     func manyProviders() {
-        // With figures shown, six chips exceed the fixed expanded width, so the window must
-        // follow the wider of the two rather than clipping the collapsed tab.
-        let many = NotchSurfaceLayout(providerCount: 6, chipWidth: 58)
+        let many = NotchSurfaceLayout(
+            providerCount: 6, notchWidth: 185, notchHeight: 32, chipWidth: 58
+        )
         #expect(many.collapsedSize.width > 322)
         #expect(many.windowSize.width == many.collapsedSize.width)
-        #expect(many.expandedSize(rowCount: 1).width == many.collapsedSize.width)
     }
 }
 
