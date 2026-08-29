@@ -84,6 +84,17 @@ legibility wins over the silhouette, and only the width gives; the height stays 
 
 ### Hovering a chip
 
+Hovering any ring sweeps **all** of them for one turn, and opens that provider's snippet.
+
+The sweep on hover is animation only — it does not re-read anything. Hovering is passive and
+constant, and refreshing on it would hammer the providers' local interfaces for no benefit.
+A click is what actually re-reads. The ring draws both identically, so the feedback is
+consistent either way.
+
+Moving along the row does not restart the sweep; it stays one continuous turn rather than
+stuttering chip to chip.
+
+
 The panel grows **downward only**. Its width stays the housing's in every state: a panel
 wider than the housing has to flare outward from it, and that overhang is what made the
 surface look stuck on rather than part of the notch.
