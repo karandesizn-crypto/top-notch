@@ -43,11 +43,14 @@ final class NotchWindow: NSPanel {
 /// resize. Without this, the collapsed surface would swallow clicks across a wide band of
 /// the menu bar.
 final class PassthroughContentView: NSView {
-    /// The live surface rectangle, in window coordinates.
-    var interactiveRect: () -> CGRect = { .zero }
+    /// The live interactive regions, in window coordinates.
+    ///
+    /// Two of them: the drawn surface, and the invisible band over the camera that the
+    /// tuck-away gesture lives on. Everything else stays click-through.
+    var interactiveRects: () -> [CGRect] = { [] }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard interactiveRect().contains(point) else { return nil }
+        guard interactiveRects().contains(where: { $0.contains(point) }) else { return nil }
         return super.hitTest(point)
     }
 }

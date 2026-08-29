@@ -277,33 +277,26 @@ struct NotchSurfaceLayoutTests {
     /// Three tools on the measured 185x32 housing.
     let three = NotchSurfaceLayout(providerCount: 3, notchWidth: 185, housingRowHeight: 32)
 
-    @Test("the resting strip is exactly the housing's height")
-    func restingStripFitsTheNotchRow() {
-        // The point: it lives in the menu bar row and covers nothing on the desktop.
-        #expect(three.collapsedSize.height == 32)
-        #expect(three.collapsedSize.height == three.housingRowHeight)
-    }
-
-    @Test("it is wider than the housing, because the camera has no pixels behind it")
-    func widerThanHousingByNecessity() {
-        // Four chips at 28pt, 16pt padding, 24pt flare, either side of the 185pt camera.
+    @Test("the chips are one group, sized to themselves rather than to the camera")
+    func chipsAreOneGroup() {
+        // Four items at 28pt, 16pt padding, 24pt flare. No width reserved for the camera:
+        // the group sits below it, not around it.
         #expect(three.itemCount == 4)
-        #expect(three.collapsedSize.width == 337)
-        #expect(three.collapsedSize.width > three.notchWidth)
+        #expect(three.contentWidth == 112)
+        #expect(three.collapsedSize.width == 152)
+        #expect(three.collapsedSize.height == 34)
     }
 
-    @Test("chips split either side of the camera, remainder on the left")
-    func chipsSplitAroundTheCamera() {
-        #expect(three.leadingItemCount == 2)
-        #expect(three.leadingFlankWidth == 56)
-        #expect(three.trailingFlankWidth == 56)
-        #expect(three.isLeading(itemIndex: 0))
-        #expect(three.isLeading(itemIndex: 3) == false)
+    @Test("the group is narrower than the housing it hangs from")
+    func narrowerThanHousing() {
+        // Which is what lets it read as the notch continuing downward.
+        #expect(three.collapsedSize.width < three.notchWidth)
+    }
 
-        // Three items: two left, one right.
-        let two = NotchSurfaceLayout(providerCount: 2, notchWidth: 185, housingRowHeight: 32)
-        #expect(two.leadingItemCount == 2)
-        #expect(two.trailingFlankWidth == two.chipWidth)
+    @Test("the drawn surface hangs below the camera's row")
+    func hangsBelowTheCamera() {
+        #expect(three.surfaceTopInset == three.housingRowHeight)
+        #expect(three.surfaceTopInset == 32)
     }
 
     @Test("a chip never shrinks below a legible width")
@@ -314,30 +307,33 @@ struct NotchSurfaceLayoutTests {
         #expect(squeezed.chipWidth == squeezed.minimumChipWidth)
     }
 
-    @Test("minimized drops the chips, leaving the housing band")
+    @Test("minimized draws nothing at all")
     func minimized() {
-        #expect(three.minimizedSize.height == 32)
-        #expect(three.minimizedSize.width == 185)
-        // Same height as resting; it is the width that collapses to the camera alone.
-        #expect(three.minimizedSize.width < three.collapsedSize.width)
+        // Only the invisible hover band remains, so the screen is completely clear.
+        #expect(three.minimizedSize == .zero)
     }
 
     @Test("hovering adds a snippet, not a panel")
     func snippetIsSmall() {
         #expect(three.expandedBodyHeight == 52)     // 9 padding x2 + 34 snippet
-        let grown = three.expandedSize.height - three.collapsedSize.height
-        #expect(grown == three.expandedBodyHeight)
-        // Only hovering ever reaches below the menu bar, and only this far.
-        #expect(three.expandedSize.height == 84)
+        #expect(three.expandedSize.height == three.collapsedSize.height + 52)
+        #expect(three.expandedSize.height == 86)
     }
 
     @Test("state selection covers all three forms")
     func sizeForState() {
-        #expect(three.size(expanded: false, minimized: true) == three.minimizedSize)
+        #expect(three.size(expanded: false, minimized: true) == .zero)
         #expect(three.size(expanded: false, minimized: false) == three.collapsedSize)
         #expect(three.size(expanded: true, minimized: false) == three.expandedSize)
         // Minimized wins: tucking away must not be undone by a stale hover.
-        #expect(three.size(expanded: true, minimized: true) == three.minimizedSize)
+        #expect(three.size(expanded: true, minimized: true) == .zero)
+    }
+
+    @Test("the window covers the whole camera, so the hover band can be reached")
+    func windowSpansTheCamera() {
+        // The group is narrower than the housing, but the band above it must not be.
+        #expect(three.windowSize.width >= three.notchWidth)
+        #expect(three.windowSize.height == three.surfaceTopInset + three.expandedSize.height)
     }
 
     @Test("the window fits every reachable state, so changing state never resizes it")
@@ -348,7 +344,7 @@ struct NotchSurfaceLayoutTests {
             )
             for size in [layout.collapsedSize, layout.expandedSize, layout.minimizedSize] {
                 #expect(size.width <= layout.windowSize.width)
-                #expect(size.height <= layout.windowSize.height)
+                #expect(layout.surfaceTopInset + size.height <= layout.windowSize.height)
             }
         }
     }

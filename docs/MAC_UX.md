@@ -52,51 +52,51 @@ covers is affected.
 
 ### Resting
 
-Chips either side of the camera, inside the menu bar row.
+One group of chips, centred directly beneath the camera.
 
 ```
-   ╭────┬──────────┬────╮
-   │ ◔ ◔│  camera  │◔  +│   <- 333 x 32pt, entirely in the menu bar row
-   ╰────┴──────────┴────╯
+        ┌──────────┐
+        │  camera  │
+      ╭─┴──────────┴─╮
+      │  ◔  ◔  ◔  +  │   <- 148 x 34pt, narrower than the housing
+      ╰──────────────╯
 ```
 
-**Exactly the housing's height and nothing below it**, so no part of the desktop is covered
-or made unclickable. That is the whole constraint this layout exists to satisfy: an earlier
-version hung 46pt below the menu bar and made a Finder toolbar and a row of browser tabs
-unreachable.
+The chips sit **together**, not split either side of the camera. They cannot sit *on* it —
+there are no pixels behind the housing — so the group hangs just below, narrower than the
+housing, and merges with it because both are black. That reads as the notch continuing
+downward rather than as a bar of its own.
 
-It is *wider* than the housing by necessity. The camera has no pixels behind it, so content
-cannot be centred on the notch — it has to sit beside it. The chips split as evenly as the
-count allows, with the remainder on the left.
-
-Percentages beside each ring are a setting, off by default: they widen every chip and the
-strip with them.
+The group is sized to its chips, so it never reserves width for the camera. Adding a tool
+widens it by one chip.
 
 ### Hovering a chip
 
-A two-line snippet drops below the row: which provider and window, then the figure and its
+A two-line snippet drops below the group: which provider and window, then the figure and its
 reset.
 
 ```
-   ╭────┬──────────┬────╮
-   │ ◔ ◔│  camera  │◔  +│
-   ├────┴──────────┴────┤
-   │ ✳ Claude · 5-hour  │
-   │ 73% used · resets  │
-   ╰────────────────────╯
+      ╭──────────────────────╮
+      │  ◔  ◔  ◔  +          │
+      │  ✳ Claude · 5-hour   │
+      │  73% used · resets…  │
+      ╰──────────────────────╯
 ```
 
-A glance, not a panel — 333×84 in total. The most constrained window is the one shown, so a
-provider reporting several does not make it taller; the limit that will bite first is the
-only one worth reading here. This is the only state that reaches below the menu bar, and
-only while the pointer is on a chip.
+A glance, not a panel — 232×86. The most constrained window is the one shown, so a provider
+reporting several does not make it taller; the limit that will bite first is the only one
+worth reading here.
 
 ### Minimized
 
-Hovering the camera band drops the chips, leaving the strip the width of the housing alone —
-effectively invisible, since that region has no pixels. Hovering it again brings them back.
-It toggles on entry rather than continuously, so one pass of the pointer fires it once
-instead of flickering while the pointer rests there.
+Above the group, the window still spans the camera's own row as an **invisible hover band**.
+Nothing is drawn there, so nothing is covered, but hovering it tucks the chips away entirely
+— the drawn surface becomes nothing at all and the screen is completely clear. Hovering the
+band again brings the group back.
+
+Keeping the gesture on the camera itself is deliberate: it is the one part of the menu bar
+row that never holds anything else. It toggles on entry rather than continuously, so one
+pass of the pointer fires it once instead of flickering while the pointer rests there.
 
 ## Silhouette
 

@@ -45,21 +45,31 @@ final class NotchWindowController {
         container.addSubview(hosting)
         self.hosting = hosting
 
-        // AppKit window coordinates: origin bottom-left. The surface is top-centred inside
-        // the window, so its rect follows the current state's size.
-        container.interactiveRect = { [weak self] in
-            guard let self else { return .zero }
+        // AppKit window coordinates: origin bottom-left.
+        container.interactiveRects = { [weak self] in
+            guard let self else { return [] }
             let windowSize = window.frame.size
             let layout = currentLayout()
+
+            // The camera's own row: nothing is drawn here, but hovering it tucks the chips
+            // away, so it has to receive events.
+            let band = CGRect(
+                x: 0, y: windowSize.height - layout.surfaceTopInset,
+                width: windowSize.width, height: layout.surfaceTopInset
+            )
+
             let size = SurfaceSizing.size(
                 layout: layout, expanded: surface.isExpanded, minimized: surface.isMinimized
             )
-            return CGRect(
+            guard size.height > 0 else { return [band] }
+
+            let drawn = CGRect(
                 x: (windowSize.width - size.width) / 2,
-                y: windowSize.height - size.height,
+                y: windowSize.height - layout.surfaceTopInset - size.height,
                 width: size.width,
                 height: size.height
             )
+            return [band, drawn]
         }
 
         window.contentView = container

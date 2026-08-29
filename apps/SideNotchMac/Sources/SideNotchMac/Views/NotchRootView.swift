@@ -52,16 +52,42 @@ struct NotchRootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            content
+            hoverBand
+            if !minimized {
+                surfaceBody
+                    .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
+            }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: minimized)
     }
 
-    private var content: some View {
+    /// The camera's own row. Nothing is drawn here — the camera has no pixels behind it —
+    /// but hovering it tucks the chips away, so the gesture stays on the notch itself.
+    ///
+    /// Toggling on entry rather than continuously means one pass of the pointer fires it
+    /// once instead of flickering while the pointer rests there.
+    private var hoverBand: some View {
+        Color.clear
+            .frame(height: layout.surfaceTopInset)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                guard hovering, !surface.isPinned else { return }
+                withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
+                    surface.isMinimized.toggle()
+                    if surface.isMinimized { surface.isExpanded = false }
+                }
+            }
+            .accessibilityLabel(minimized ? "Show SideNotch" : "Hide SideNotch")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    /// The drawn surface: the chip group, and the snippet when a chip is hovered.
+    private var surfaceBody: some View {
         VStack(spacing: 0) {
             chipRow
-            if expanded && !minimized {
+            if expanded {
                 snippet
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -71,25 +97,20 @@ struct NotchRootView: View {
             shape
                 .fill(Tokens.Palette.surface)
                 .overlay { shape.stroke(Tokens.Palette.surfaceEdge, lineWidth: 0.5) }
-                .shadow(color: .black.opacity(0.45), radius: expanded ? 16 : 7, y: expanded ? 7 : 3)
+                .shadow(color: .black.opacity(0.45), radius: expanded ? 14 : 6, y: expanded ? 6 : 3)
         }
         .clipShape(shape)
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
-        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: minimized)
-        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: size.height)
         .onHover { hovering in
-            // Leaving the tab collapses it. Entering does not expand on its own: a chip
-            // has to be hovered, so the card always describes something specific rather
-            // than whatever happened to be selected last.
+            // Leaving the group collapses the snippet; a chip has to be hovered to open it.
             guard !surface.isPinned, !hovering else { return }
             withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
                 surface.isExpanded = false
             }
         }
         .onTapGesture { togglePinned() }
-        .accessibilityElement(children: expanded ? .contain : .contain)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("SideNotch usage")
-        .accessibilityHint(expanded ? "Click to collapse" : "Click to expand usage details")
     }
 
     private func togglePinned() {
@@ -118,40 +139,13 @@ struct NotchRootView: View {
         providers.map(RowItem.provider) + (layout.showsAddButton ? [.add] : [])
     }
 
-    /// The resting strip: chips either side of the camera, inside the menu bar row.
-    ///
-    /// The middle is a hole, not a spacer with something behind it. The camera has no
-    /// pixels, so the layout reserves its measured width and the chips split around it —
-    /// which is also why the strip is wider than the housing while being no taller.
-    ///
-    /// Hovering that middle band tucks the chips away, so a pass of the pointer over the
-    /// notch clears the strip. It toggles on entry rather than continuously, so one pass
-    /// fires it once instead of flickering while the pointer rests there.
+    /// One group of chips, centred beneath the camera.
     private var chipRow: some View {
-        let items = rowItems
-        let split = min(layout.leadingItemCount, items.count)
-
-        return HStack(spacing: 0) {
-            if !minimized {
-                ForEach(items.prefix(split), id: \.self) { item($0) }
-            }
-
-            Color.clear
-                .frame(width: layout.notchWidth)
-                .contentShape(Rectangle())
-                .onHover { hovering in
-                    guard hovering, !surface.isPinned else { return }
-                    withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                        surface.isMinimized.toggle()
-                        if surface.isMinimized { surface.isExpanded = false }
-                    }
-                }
-
-            if !minimized {
-                ForEach(items.dropFirst(split), id: \.self) { item($0) }
-            }
+        HStack(spacing: 0) {
+            ForEach(rowItems, id: \.self) { item($0) }
         }
-        .frame(height: layout.housingRowHeight)
+        .padding(.horizontal, layout.horizontalPadding + layout.flare)
+        .frame(height: layout.chipRowHeight)
     }
 
     @ViewBuilder
@@ -169,7 +163,7 @@ struct NotchRootView: View {
                 .foregroundStyle(Tokens.Palette.secondaryText)
                 .frame(width: Tokens.Ring.chipDiameter, height: Tokens.Ring.chipDiameter)
                 .background { Circle().fill(Color.white.opacity(0.08)) }
-                .frame(width: layout.chipWidth, height: layout.housingRowHeight)
+                .frame(width: layout.chipWidth, height: layout.chipRowHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -202,7 +196,7 @@ struct NotchRootView: View {
                         .monospacedDigit()
                 }
             }
-            .frame(width: layout.chipWidth, height: layout.housingRowHeight)
+            .frame(width: layout.chipWidth, height: layout.chipRowHeight)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
