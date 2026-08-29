@@ -33,7 +33,7 @@ enum PreviewRenderer {
 
         let canvasWidth: CGFloat = 760
         let chromeHeight = notch.notchHeight
-        let canvasHeight = layout.maximumExpandedSize.height + 70
+        let canvasHeight = layout.expandedSize.height + 70
 
         let content = ZStack(alignment: .top) {
             LinearGradient(

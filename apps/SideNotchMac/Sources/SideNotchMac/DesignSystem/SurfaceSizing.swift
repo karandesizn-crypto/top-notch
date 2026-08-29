@@ -22,15 +22,9 @@ enum SurfaceSizing {
         )
     }
 
-    /// Number of window rows the expanded body will render for a provider.
-    static func rowCount(for status: ProviderStatus?) -> Int {
-        guard let windows = status?.snapshot?.windows, !windows.isEmpty else { return 1 }
-        return min(windows.count, NotchSurfaceLayout.maximumRows)
-    }
-
     static func size(
-        layout: NotchSurfaceLayout, expanded: Bool, minimized: Bool, status: ProviderStatus?
+        layout: NotchSurfaceLayout, expanded: Bool, minimized: Bool
     ) -> CGSize {
-        layout.size(expanded: expanded, minimized: minimized, rowCount: rowCount(for: status))
+        layout.size(expanded: expanded, minimized: minimized)
     }
 }

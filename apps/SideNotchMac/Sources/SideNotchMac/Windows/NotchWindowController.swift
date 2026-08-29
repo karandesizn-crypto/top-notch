@@ -52,10 +52,7 @@ final class NotchWindowController {
             let windowSize = window.frame.size
             let layout = currentLayout()
             let size = SurfaceSizing.size(
-                layout: layout,
-                expanded: surface.isExpanded,
-                minimized: surface.isMinimized,
-                status: store.status(for: surface.selected)
+                layout: layout, expanded: surface.isExpanded, minimized: surface.isMinimized
             )
             return CGRect(
                 x: (windowSize.width - size.width) / 2,
@@ -177,7 +174,7 @@ final class NotchWindowController {
         lines.append("anchor top y   \(notch.anchorTopY)")
         lines.append("providers      \(store.visibleProviders.count)")
         lines.append("collapsed      \(Int(layout.collapsedSize.width))x\(Int(layout.collapsedSize.height))")
-        lines.append("expanded max   \(Int(layout.maximumExpandedSize.width))x\(Int(layout.maximumExpandedSize.height))")
+        lines.append("expanded max   \(Int(layout.expandedSize.width))x\(Int(layout.expandedSize.height))")
         lines.append("window         \(Int(window.frame.width))x\(Int(window.frame.height)) at (\(Int(window.frame.minX)), \(Int(window.frame.minY)))")
         lines.append("window top     \(Int(window.frame.maxY))  display top \(Int(display.frame.maxY))")
         return lines.joined(separator: "\n")

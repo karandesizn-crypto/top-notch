@@ -286,8 +286,7 @@ struct NotchSurfaceLayoutTests {
 
     @Test("chips divide the housing's width between them")
     func chipsShareTheWidth() {
-        // Four items: three rings and the add button.
-        #expect(three.itemCount == 4)
+        #expect(three.itemCount == 4)               // three rings and the add button
         #expect(three.contentWidth == 145)          // 185 - 24 flare - 16 padding
         #expect(three.chipWidth == 145.0 / 4)
         #expect(three.chipWidth >= three.minimumChipWidth)
@@ -295,7 +294,6 @@ struct NotchSurfaceLayoutTests {
 
     @Test("enough tools eventually widen the surface rather than squeezing the chips")
     func legibilityWinsEventually() {
-        // Six tools plus the add button cannot fit in 185pt at a legible size.
         let many = NotchSurfaceLayout(providerCount: 6, notchWidth: 185, housingRowHeight: 32)
         #expect(many.collapsedSize.width > 185)
         #expect(many.chipWidth >= many.minimumChipWidth)
@@ -309,36 +307,23 @@ struct NotchSurfaceLayoutTests {
         #expect(three.minimizedSize.height < three.collapsedSize.height)
     }
 
+    @Test("hovering adds a snippet, not a panel")
+    func snippetIsSmall() {
+        // A fixed, small addition: the point of hovering is a glance, not a dashboard.
+        #expect(three.expandedBodyHeight == 52)     // 9 padding x2 + 34 snippet
+        let grown = three.expandedSize.height - three.collapsedSize.height
+        #expect(grown == three.expandedBodyHeight)
+        // The whole expanded surface stays shorter than the old card's body alone.
+        #expect(three.expandedSize.height < 140)
+    }
+
     @Test("state selection covers all three forms")
     func sizeForState() {
-        #expect(three.size(expanded: false, minimized: true, rowCount: 1) == three.minimizedSize)
-        #expect(three.size(expanded: false, minimized: false, rowCount: 1) == three.collapsedSize)
-        #expect(three.size(expanded: true, minimized: false, rowCount: 1)
-                == three.expandedSize(rowCount: 1))
-        // Minimized wins over expanded: tucking away must not be overridden by a stale
-        // hover state.
-        #expect(three.size(expanded: true, minimized: true, rowCount: 1) == three.minimizedSize)
-    }
-
-    @Test("expanding grows downward from the same top edge")
-    func expandedSize() {
-        let expanded = three.expandedSize(rowCount: 2)
-        #expect(expanded.height > three.collapsedSize.height)
-        #expect(expanded.height == three.collapsedHeight + three.expandedBodyHeight(rowCount: 2))
-        #expect(expanded.width >= three.collapsedSize.width)
-    }
-
-    @Test("the body follows its content instead of opening onto empty space")
-    func bodyHeightFollowsContent() {
-        let single = three.expandedBodyHeight(rowCount: 1)
-        let double = three.expandedBodyHeight(rowCount: 2)
-        #expect(single < double)
-        #expect(double - single == three.contentRowHeight + three.contentRowSpacing)
-    }
-
-    @Test("a provider with no windows still gets one row's worth of space")
-    func zeroRows() {
-        #expect(three.expandedBodyHeight(rowCount: 0) == three.expandedBodyHeight(rowCount: 1))
+        #expect(three.size(expanded: false, minimized: true) == three.minimizedSize)
+        #expect(three.size(expanded: false, minimized: false) == three.collapsedSize)
+        #expect(three.size(expanded: true, minimized: false) == three.expandedSize)
+        // Minimized wins: tucking away must not be undone by a stale hover.
+        #expect(three.size(expanded: true, minimized: true) == three.minimizedSize)
     }
 
     @Test("the window fits every reachable state, so changing state never resizes it")
@@ -348,12 +333,9 @@ struct NotchSurfaceLayoutTests {
                 providerCount: count, notchWidth: 185, housingRowHeight: 32
             )
             #expect(layout.windowSize.width >= layout.collapsedSize.width)
+            #expect(layout.windowSize.width >= layout.expandedSize.width)
+            #expect(layout.windowSize.height >= layout.expandedSize.height)
             #expect(layout.windowSize.height >= layout.minimizedSize.height)
-            for rows in 0...NotchSurfaceLayout.maximumRows {
-                let size = layout.expandedSize(rowCount: rows)
-                #expect(size.width <= layout.windowSize.width)
-                #expect(size.height <= layout.windowSize.height)
-            }
         }
     }
 }

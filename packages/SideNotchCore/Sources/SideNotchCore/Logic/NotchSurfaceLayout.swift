@@ -24,14 +24,10 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     /// Outward flare where the surface meets the top of the display.
     public let flare: CGFloat
     public let expandedWidth: CGFloat
-    public let contentRowHeight: CGFloat
-    public let contentRowSpacing: CGFloat
-    public let cardTitleHeight: CGFloat
+    /// Height of the two-line snippet shown on hover.
+    public let snippetHeight: CGFloat
     public let bodyVerticalPadding: CGFloat
     public let providerCount: Int
-
-    /// Window rows reserved for the busiest provider, so switching never resizes the window.
-    public static let maximumRows = 2
 
     public init(
         providerCount: Int,
@@ -42,11 +38,9 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         minimumChipWidth: CGFloat = 34,
         horizontalPadding: CGFloat = 8,
         flare: CGFloat = 12,
-        expandedWidth: CGFloat = 322,
-        contentRowHeight: CGFloat = 42,
-        contentRowSpacing: CGFloat = 9,
-        cardTitleHeight: CGFloat = 20,
-        bodyVerticalPadding: CGFloat = 11
+        expandedWidth: CGFloat = 232,
+        snippetHeight: CGFloat = 34,
+        bodyVerticalPadding: CGFloat = 9
     ) {
         self.providerCount = max(providerCount, 1)
         self.notchWidth = notchWidth
@@ -57,9 +51,7 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.horizontalPadding = horizontalPadding
         self.flare = flare
         self.expandedWidth = expandedWidth
-        self.contentRowHeight = contentRowHeight
-        self.contentRowSpacing = contentRowSpacing
-        self.cardTitleHeight = cardTitleHeight
+        self.snippetHeight = snippetHeight
         self.bodyVerticalPadding = bodyVerticalPadding
     }
 
@@ -103,41 +95,33 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         CGSize(width: max(notchWidth, minimumChipWidth * 2), height: housingRowHeight)
     }
 
-    /// Height of the expanded body, following the content it actually holds.
+    /// Height added on hover.
     ///
-    /// A provider reporting one window must not reserve the room a two-window provider
-    /// needs, or the surface opens onto empty space.
-    public func expandedBodyHeight(rowCount: Int) -> CGFloat {
-        let rows = max(rowCount, 1)
-        let rowsHeight = CGFloat(rows) * contentRowHeight
-            + CGFloat(rows - 1) * contentRowSpacing
-        // The trailing spacing is the gap between the card title and the first row.
-        return bodyVerticalPadding * 2 + cardTitleHeight + contentRowSpacing + rowsHeight
+    /// Fixed, and small: hovering shows a snippet — the window that matters and when it
+    /// resets — not a full panel. A provider with two windows gets the more constrained
+    /// one rather than a taller card.
+    public var expandedBodyHeight: CGFloat {
+        bodyVerticalPadding * 2 + snippetHeight
     }
 
-    public func expandedSize(rowCount: Int) -> CGSize {
+    public var expandedSize: CGSize {
         CGSize(
             width: max(expandedWidth, collapsedSize.width),
-            height: collapsedSize.height + expandedBodyHeight(rowCount: rowCount)
+            height: collapsedSize.height + expandedBodyHeight
         )
     }
 
-    /// The largest the surface can get, which is what the window is sized for.
-    public var maximumExpandedSize: CGSize {
-        expandedSize(rowCount: Self.maximumRows)
-    }
-
-    public func size(expanded: Bool, minimized: Bool, rowCount: Int) -> CGSize {
+    public func size(expanded: Bool, minimized: Bool) -> CGSize {
         if minimized { return minimizedSize }
-        return expanded ? expandedSize(rowCount: rowCount) : collapsedSize
+        return expanded ? expandedSize : collapsedSize
     }
 
     /// Window size: wide and tall enough for every reachable state, so expanding is purely
     /// a SwiftUI animation with no window resize.
     public var windowSize: CGSize {
         CGSize(
-            width: max(maximumExpandedSize.width, collapsedSize.width),
-            height: maximumExpandedSize.height
+            width: max(expandedSize.width, collapsedSize.width),
+            height: expandedSize.height
         )
     }
 }

@@ -40,9 +40,7 @@ struct NotchRootView: View {
     private var minimized: Bool { surface.isMinimized }
 
     private var size: CGSize {
-        SurfaceSizing.size(
-            layout: layout, expanded: expanded, minimized: minimized, status: status
-        )
+        SurfaceSizing.size(layout: layout, expanded: expanded, minimized: minimized)
     }
 
     private var shape: NotchSurfaceShape {
@@ -64,7 +62,7 @@ struct NotchRootView: View {
         VStack(spacing: 0) {
             chipRow
             if expanded && !minimized {
-                detailCard
+                snippet
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -227,122 +225,50 @@ struct NotchRootView: View {
 
     // MARK: Expanded detail
 
-    private var detailCard: some View {
-        VStack(alignment: .leading, spacing: layout.contentRowSpacing) {
-            HStack(spacing: 6) {
-                ProviderLogo(provider: surface.selected, size: 13)
-                Text("\(settings.displayName(for: surface.selected)) Usage")
-                    .font(Tokens.Type_.cardTitle)
-                Spacer(minLength: 6)
-                if let tokens = tokensTodayText {
-                    Text(tokens)
-                        .font(Tokens.Type_.rowMeta)
-                        .foregroundStyle(Tokens.Palette.tertiaryText)
-                        .monospacedDigit()
-                }
-                if let plan = status?.snapshot?.plan {
-                    Text(plan.uppercased())
-                        .font(Tokens.Type_.rowMeta)
-                        .foregroundStyle(Tokens.Palette.secondaryText)
-                        .padding(.horizontal, 5).padding(.vertical, 1.5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.white.opacity(0.09))
-                        )
-                }
-            }
-            .foregroundStyle(Tokens.Palette.primaryText)
-            .frame(height: layout.cardTitleHeight)
-
-            if let windows = status?.snapshot?.windows, !windows.isEmpty {
-                ForEach(windows.prefix(NotchSurfaceLayout.maximumRows)) { window in
-                    windowRow(window)
-                }
-            } else {
-                unavailableRow
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Tokens.Surface.bodyPadding + layout.flare)
-        .padding(.vertical, layout.bodyVerticalPadding)
-        .frame(
-            width: size.width,
-            height: layout.expandedBodyHeight(rowCount: SurfaceSizing.rowCount(for: status)),
-            alignment: .top
-        )
-    }
-
-    private func windowRow(_ window: UsageWindow) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(window.label)
+    /// Two lines: which provider and window, then the figure and its reset.
+    ///
+    /// A glance, not a panel. The most constrained window is the one shown — a provider
+    /// with several does not make the surface taller, because the limit that will bite
+    /// first is the only one worth reading here.
+    private var snippet: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                ProviderLogo(provider: surface.selected, size: 10)
+                Text(snippetTitle)
                     .font(Tokens.Type_.rowLabel)
                     .foregroundStyle(Tokens.Palette.primaryText)
-                Spacer(minLength: 0)
-                if settings.showResetCountdown,
-                   let phrase = ResetCalculator.resetPhrase(to: window.resetDate, from: store.now) {
-                    Text(store.isStale(surface.selected) ? "\(phrase) · stale" : phrase)
-                        .font(Tokens.Type_.rowMeta)
-                        .foregroundStyle(Tokens.Palette.tertiaryText)
-                }
+                    .lineLimit(1)
             }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Tokens.Palette.track)
-                    if let fraction = window.usedFraction {
-                        // A visible stub at very low percentages, so a bar that exists but
-                        // is nearly empty does not look like a missing reading.
-                        Capsule()
-                            .fill(Tokens.Palette.color(for: window.state))
-                            .frame(width: max(proxy.size.width * fraction, fraction > 0 ? 4 : 0))
-                    }
-                }
-            }
-            .frame(height: 4)
-
-            Text(window.usedPercentage.map { "\(Int($0.rounded()))% used" } ?? "Unavailable")
+            Text(snippetDetail)
                 .font(Tokens.Type_.rowMeta)
                 .foregroundStyle(Tokens.Palette.secondaryText)
-                .monospacedDigit()
+                .lineLimit(1)
         }
-        .frame(height: layout.contentRowHeight, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Tokens.Surface.bodyPadding + layout.flare)
+        .padding(.vertical, layout.bodyVerticalPadding)
+        .frame(width: size.width, height: layout.expandedBodyHeight, alignment: .leading)
     }
 
-    private var unavailableRow: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(status?.state == .loading ? "Checking…" : "Unavailable")
-                .font(Tokens.Type_.rowLabel)
-                .foregroundStyle(Tokens.Palette.primaryText)
-            if let message = status?.statusMessage {
-                Text(message)
-                    .font(Tokens.Type_.rowMeta)
-                    .foregroundStyle(Tokens.Palette.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+    private var snippetTitle: String {
+        let name = settings.displayName(for: surface.selected)
+        guard let window = status?.headlineWindow else { return name }
+        return "\(name) · \(window.label)"
     }
 
-    /// "2.2M today" when the provider reports token totals.
-    ///
-    /// This is not a context window. A context window is per-conversation state and no
-    /// provider exposes one for a client that owns no conversation, so none is shown.
-    private var tokensTodayText: String? {
-        guard let raw = status?.snapshot?.metadata["tokensToday"],
-              let tokens = Int64(raw), tokens > 0
-        else { return nil }
+    private var snippetDetail: String {
+        guard let status else { return "No data" }
+        guard let window = status.headlineWindow,
+              let percentage = window.usedPercentage
+        else { return status.statusMessage ?? "Unavailable" }
 
-        let formatted: String
-        switch tokens {
-        case 1_000_000...:
-            formatted = String(format: "%.1fM", Double(tokens) / 1_000_000)
-        case 1_000...:
-            formatted = "\(tokens / 1_000)K"
-        default:
-            formatted = "\(tokens)"
+        var parts = ["\(Int(percentage.rounded()))% used"]
+        if settings.showResetCountdown,
+           let phrase = ResetCalculator.resetPhrase(to: window.resetDate, from: store.now) {
+            parts.append(phrase.replacingOccurrences(of: "Resets ", with: "resets "))
         }
-        return "\(formatted) today"
+        if store.isStale(surface.selected) { parts.append("stale") }
+        return parts.joined(separator: " · ")
     }
 
     private func caption(for status: ProviderStatus?) -> String {
