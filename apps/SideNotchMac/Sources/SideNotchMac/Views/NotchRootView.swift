@@ -339,11 +339,12 @@ struct NotchRootView: View {
         return "\(Int(percentage.rounded()))%"
     }
 
-    /// A click selects the provider, pins its snippet open, and re-reads it.
+    /// A click selects the provider, pins its snippet open, and re-reads **every** tool.
     ///
     /// Re-reading on click is the point: a deliberate click usually means "is this still
-    /// true?", and the ring's sweep answers that the question was heard even when the
-    /// figure comes back unchanged.
+    /// true?", and the sweep answers that the question was heard even when the figures come
+    /// back unchanged. All the rings animate rather than only the one clicked, staggered so
+    /// it reads as a cascade rather than a glitch — one click refreshes the lot.
     private func activate(_ provider: ProviderID) {
         withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
             surface.selected = provider
@@ -351,7 +352,7 @@ struct NotchRootView: View {
             surface.isPinned = true
             surface.isMinimized = false
         }
-        Task { await store.refresh(provider) }
+        Task { await store.refreshAllStaggered() }
     }
 
     // MARK: Accessibility

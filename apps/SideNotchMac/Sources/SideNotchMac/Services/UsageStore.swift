@@ -178,11 +178,33 @@ final class UsageStore {
         lastRefresh = now
     }
 
+    /// Shortest time a refresh is allowed to appear to take.
+    ///
+    /// A local read can return in a few milliseconds, which would make the ring's sweep a
+    /// flash rather than an animation — and leave the user unsure the click registered.
+    static let minimumVisibleRefresh: Duration = .milliseconds(480)
+
+    /// Refreshes every visible provider, one shortly after the next.
+    ///
+    /// The stagger is the point: all the rings animate, but as a cascade rather than in
+    /// unison, which reads as the surface responding rather than as a glitch.
+    func refreshAllStaggered(step: Duration = .milliseconds(90)) async {
+        await withTaskGroup(of: Void.self) { group in
+            for (index, id) in visibleProviders.enumerated() {
+                group.addTask { [weak self] in
+                    try? await Task.sleep(for: step * index)
+                    await self?.refresh(id)
+                }
+            }
+        }
+    }
+
     /// Refreshes one provider. Safe to call concurrently; duplicate requests are dropped.
     func refresh(_ id: ProviderID) async {
         guard let provider = providers[id], !inFlight.contains(id) else { return }
         inFlight.insert(id)
         statuses[id]?.isRefreshing = true
+        let started = ContinuousClock.now
         defer {
             inFlight.remove(id)
             statuses[id]?.isRefreshing = false
@@ -207,6 +229,13 @@ final class UsageStore {
             Log.provider.notice("\(id.rawValue, privacy: .public) unavailable: \(error.userFacingDescription, privacy: .public)")
         } catch {
             statuses[id]?.error = .unknown(detail: "unexpected failure")
+        }
+
+        // Hold the indicator long enough to be seen, without delaying the data itself —
+        // the figures above are already published by this point.
+        let elapsed = ContinuousClock.now - started
+        if elapsed < Self.minimumVisibleRefresh {
+            try? await Task.sleep(for: Self.minimumVisibleRefresh - elapsed)
         }
     }
 

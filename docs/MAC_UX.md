@@ -89,10 +89,16 @@ worth reading here.
 
 ### Clicking a chip
 
-A click selects the provider, pins the snippet open, and **re-reads that provider**. The
-ring shows a bright arc travelling around it while the read is in flight, layered over the
-existing figure rather than replacing it, so the number stays readable during the refresh
-instead of blinking away.
+A click selects the provider, pins the snippet open, and **re-reads every tool** — not just
+the one clicked. Each ring shows a bright arc travelling around it while its read is in
+flight, layered over the existing figure rather than replacing it, so the numbers stay
+readable during the refresh instead of blinking away.
+
+The reads are staggered by 90ms so the rings animate as a cascade rather than in unison,
+which reads as the surface responding rather than as a glitch. A refresh also holds its
+indicator for at least 480ms: a local read can return in a few milliseconds, which would
+make the sweep a flash and leave the user unsure the click registered. The figures
+themselves are published as soon as they arrive; only the indicator waits.
 
 Re-reading on click is the point: a deliberate click usually means *is this still true?*,
 and the sweep answers that the question was heard even when the figure comes back unchanged.
