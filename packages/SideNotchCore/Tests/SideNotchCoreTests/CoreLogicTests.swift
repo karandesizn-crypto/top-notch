@@ -88,3 +88,54 @@ struct StalenessPolicyTests {
         #expect(policy.isStale(snapshot(ageSeconds: 1200), now: now) == true)
     }
 }
+
+@Suite("Rail geometry")
+struct RailGeometryTests {
+    // Matches the shipping tokens: 74pt rail, 78pt slots, three providers.
+    let geometry = RailGeometry(
+        verticalPadding: 14, itemHeight: 78, ringTopInset: 8, ringDiameter: 42, itemCount: 3
+    )
+
+    @Test("panel height covers every slot plus padding")
+    func panelHeight() {
+        // 14pt padding top and bottom, three 78pt slots.
+        #expect(geometry.panelHeight == 262)
+    }
+
+    @Test(
+        "ring centres step by one slot height",
+        arguments: [(0, CGFloat(43)), (1, 121), (2, 199)]
+    )
+    func ringCentres(index: Int, expected: CGFloat) {
+        #expect(geometry.ringCenterY(index: index) == expected)
+    }
+
+    @Test("a tall card centres on its ring")
+    func tallCardCentres() {
+        // Ring 1 sits at 121; a 120pt card centred on it starts at 61.
+        #expect(geometry.cardOffset(index: 1, cardHeight: 120) == 61)
+        #expect(geometry.tailCenterY(index: 1, cardHeight: 120) == 60)
+    }
+
+    @Test("a card taller than its ring offset clamps to the panel top")
+    func clampsToTop() {
+        #expect(geometry.cardOffset(index: 0, cardHeight: 150) == 0)
+        // Tail still points at the ring, which is inside the card.
+        #expect(geometry.tailCenterY(index: 0, cardHeight: 150) == 43)
+    }
+
+    @Test("a card near the bottom clamps inside the panel")
+    func clampsToBottom() {
+        let height: CGFloat = 100
+        let offset = geometry.cardOffset(index: 2, cardHeight: height)
+        #expect(offset + height <= geometry.panelHeight)
+        // The tail must still land on the ring rather than being pushed off the card.
+        let tail = geometry.tailCenterY(index: 2, cardHeight: height)
+        #expect(tail >= 0 && tail <= height)
+    }
+
+    @Test("zero card height is inert rather than producing a negative offset")
+    func zeroHeight() {
+        #expect(geometry.cardOffset(index: 2, cardHeight: 0) == 0)
+    }
+}
