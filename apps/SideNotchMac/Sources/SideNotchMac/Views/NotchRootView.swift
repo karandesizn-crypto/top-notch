@@ -103,7 +103,7 @@ struct NotchRootView: View {
 
     /// One chip per provider: a small ring and its figure. This is the entire collapsed
     /// state, and the answer to "is my usage okay?" at a glance.
-    /// Items in the collapsed row: one per provider, then the add button.
+    /// Items in the provider row: one per provider, then the add button.
     private enum RowItem: Hashable {
         case provider(ProviderID)
         case add
@@ -113,21 +113,19 @@ struct NotchRootView: View {
         providers.map(RowItem.provider) + (layout.showsAddButton ? [.add] : [])
     }
 
-    /// The collapsed row spans the camera housing, with items either side of it.
+    /// The housing band, then one continuous provider row beneath it.
     ///
-    /// The middle is a hole, not a spacer with something behind it: nothing can render over
-    /// the housing, so the layout reserves its exact measured width and the chips split
-    /// around it.
+    /// The band is empty on purpose: it is the height of the camera, which nothing can be
+    /// drawn over. Putting the row below it rather than either side of it is what lets the
+    /// providers sit together as one group.
     private var chipRow: some View {
-        let items = rowItems
-        let split = min(layout.leadingItemCount, items.count)
-
-        return HStack(spacing: Tokens.Surface.chipSpacing) {
-            ForEach(items.prefix(split), id: \.self) { item($0) }
-            Color.clear.frame(width: layout.notchWidth)
-            ForEach(items.dropFirst(split), id: \.self) { item($0) }
+        VStack(spacing: 0) {
+            Color.clear.frame(height: layout.housingRowHeight)
+            HStack(spacing: 0) {
+                ForEach(rowItems, id: \.self) { item($0) }
+            }
+            .frame(height: layout.chipRowHeight)
         }
-        .padding(.horizontal, layout.horizontalPadding + layout.flare)
         .frame(height: layout.collapsedHeight)
     }
 
@@ -142,13 +140,13 @@ struct NotchRootView: View {
     private var addButton: some View {
         Button(action: onAddProvider) {
             Image(systemName: "plus")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Tokens.Palette.secondaryText)
-                .frame(width: layout.addChipWidth, height: layout.collapsedHeight - 8)
+                .frame(width: Tokens.Ring.chipDiameter, height: Tokens.Ring.chipDiameter)
                 .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.white.opacity(0.07))
+                    Circle().fill(Color.white.opacity(0.08))
                 }
+                .frame(width: layout.addChipWidth, height: layout.chipRowHeight, alignment: .top)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -162,11 +160,11 @@ struct NotchRootView: View {
         return Button {
             select(provider)
         } label: {
-            HStack(spacing: 5) {
+            VStack(spacing: 5) {
                 UsageRing(
                     state: providerStatus?.state ?? .loading,
                     fraction: providerStatus?.headlineWindow?.usedFraction,
-                    symbolName: provider.symbolName,
+                    provider: provider,
                     diameter: Tokens.Ring.chipDiameter,
                     lineWidth: Tokens.Ring.chipLineWidth,
                     glyphSize: Tokens.Ring.chipGlyph
@@ -181,11 +179,12 @@ struct NotchRootView: View {
                         .monospacedDigit()
                 }
             }
-            .frame(width: layout.chipWidth, height: layout.collapsedHeight - 8)
+            .frame(width: layout.chipWidth, height: layout.chipRowHeight, alignment: .top)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.09))
+                        .padding(.horizontal, 2)
                 }
             }
             .contentShape(Rectangle())
@@ -209,8 +208,7 @@ struct NotchRootView: View {
     private var detailCard: some View {
         VStack(alignment: .leading, spacing: layout.contentRowSpacing) {
             HStack(spacing: 6) {
-                Image(systemName: surface.selected.symbolName)
-                    .font(.system(size: 11, weight: .medium))
+                ProviderLogo(provider: surface.selected, size: 13)
                 Text("\(settings.displayName(for: surface.selected)) Usage")
                     .font(Tokens.Type_.cardTitle)
                 Spacer(minLength: 6)

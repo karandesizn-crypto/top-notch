@@ -11,7 +11,7 @@ struct UsageRing: View {
     let state: UsageState
     /// 0...1, or nil when the provider reports no measurement.
     let fraction: Double?
-    let symbolName: String
+    let provider: ProviderID
     var diameter: CGFloat
     var lineWidth: CGFloat
     var glyphSize: CGFloat
@@ -78,12 +78,12 @@ struct UsageRing: View {
                     )
             }
 
-            Image(systemName: symbolName)
-                .font(.system(size: glyphSize, weight: .medium))
-                .foregroundStyle(
-                    state.hasMeasurement
-                        ? Tokens.Palette.primaryText : Tokens.Palette.secondaryText
-                )
+            ProviderLogo(
+                provider: provider,
+                size: glyphSize,
+                tint: state.hasMeasurement
+                    ? Tokens.Palette.primaryText : Tokens.Palette.secondaryText
+            )
         }
         .frame(width: diameter, height: diameter)
     }

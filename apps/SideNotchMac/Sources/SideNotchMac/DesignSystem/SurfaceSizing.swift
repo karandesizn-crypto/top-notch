@@ -7,19 +7,18 @@ import SideNotchCore
 /// disagreed, the surface would either swallow clicks outside itself or ignore clicks on
 /// its own content, so both read from here.
 enum SurfaceSizing {
-    /// Chip width with a ring only, and with a figure beside it.
-    static let ringOnlyChipWidth: CGFloat = 30
-    static let chipWidthWithFigure: CGFloat = 58
-
     static func layout(
         providerCount: Int, notch: NotchMetrics, showsFigures: Bool, showsAddButton: Bool
     ) -> NotchSurfaceLayout {
         NotchSurfaceLayout(
             providerCount: providerCount,
             notchWidth: notch.notchWidth,
-            notchHeight: notch.notchHeight,
+            housingRowHeight: notch.notchHeight,
             showsAddButton: showsAddButton,
-            chipWidth: showsFigures ? chipWidthWithFigure : ringOnlyChipWidth,
+            // Without figures the chip is just the ring, so it needs less room.
+            chipRowHeight: showsFigures ? Tokens.Ring.chipRowHeight
+                                        : Tokens.Ring.chipRowHeightRingOnly,
+            chipWidth: showsFigures ? Tokens.Ring.chipWidth : Tokens.Ring.chipWidthRingOnly,
             flare: Tokens.Surface.flare
         )
     }

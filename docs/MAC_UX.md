@@ -55,13 +55,24 @@ covers is affected.
 One ring per provider, plus a `+` to add another. Nothing else.
 
 ```
-     ╭─────┬─────────┬─────╮
-     │ ◔ ◔ │ camera  │ ◔ + │
-     ╰─────┴─────────┴─────╯
+     ╭──────────────────────╮
+     │       camera         │   <- empty band, the housing's height
+     │   ◔     ◔     ◔   +  │
+     │  73%   21%   52%     │
+     ╰──────────────────────╯
 ```
 
-**343×32pt** with three tools, of which 185pt is the camera housing itself — so it adds
-about 79pt either side of the notch. It answers one question — *is my usage okay?* — and the
+**276×94pt** with three tools. The top band is the height of the camera housing and stays
+empty — nothing can be drawn over the camera — so it merges with the notch. Every item sits
+*below* that band, where the display is unobstructed, which is what lets the three providers
+read as one continuous group rather than splitting either side of the camera.
+
+The surface is never narrower than the housing plus its flares, or the notch would show past
+its edges.
+
+Each provider is drawn with its own mark; see `docs/PROVIDER_MARKS.md`, including how to
+drop in exact brand artwork and the trademark question that needs answering before
+release. It answers one question — *is my usage okay?* — and the
 ring's colour answers it without needing a figure. Turning on "show percentages" widens
 every chip from 30pt to 58pt, which is why it is off by default: the collapsed tab's whole
 job is to be small.
