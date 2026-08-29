@@ -98,8 +98,9 @@ final class AppSettings {
         refreshInterval = min(max(storedInterval, Self.minimumRefreshInterval), Self.maximumRefreshInterval)
         showPercentages = defaults.object(forKey: Key.showPercentages.rawValue) as? Bool ?? true
         showResetCountdown = defaults.object(forKey: Key.showResetCountdown.rawValue) as? Bool ?? true
-        warningThreshold = defaults.object(forKey: Key.warningThreshold.rawValue) as? Double ?? 80
-        criticalThreshold = defaults.object(forKey: Key.criticalThreshold.rawValue) as? Double ?? 90
+        // Percentage form of `UsageThresholds.default`.
+        warningThreshold = defaults.object(forKey: Key.warningThreshold.rawValue) as? Double ?? 50
+        criticalThreshold = defaults.object(forKey: Key.criticalThreshold.rawValue) as? Double ?? 70
         notificationsEnabled = defaults.object(forKey: Key.notificationsEnabled.rawValue) as? Bool ?? true
         appearance = AppearanceMode(
             rawValue: defaults.string(forKey: Key.appearance.rawValue) ?? ""

@@ -10,8 +10,9 @@ enum Tokens {
     enum Surface {
         /// Content width either side of the housing when collapsed.
         static let collapsedFlank: CGFloat = 104
-        /// Content width either side of the housing when expanded.
-        static let expandedFlank: CGFloat = 150
+        /// Content width either side of the housing when expanded. Wide enough for a row
+        /// of four provider rings plus the detail card beneath them.
+        static let expandedFlank: CGFloat = 194
 
         /// Width of the outward flare where the surface meets the top of the display.
         static let flare: CGFloat = 14
@@ -28,10 +29,17 @@ enum Tokens {
     }
 
     enum Ring {
-        static let collapsedDiameter: CGFloat = 17
+        static let collapsedDiameter: CGFloat = 18
         static let collapsedLineWidth: CGFloat = 2.5
-        static let expandedDiameter: CGFloat = 54
-        static let expandedLineWidth: CGFloat = 5
+        static let collapsedGlyph: CGFloat = 8
+
+        /// The provider rings in the expanded row.
+        static let providerDiameter: CGFloat = 44
+        static let providerLineWidth: CGFloat = 3.5
+        static let providerGlyph: CGFloat = 16
+        /// Ring plus its caption, used for laying out the row.
+        static let providerSlotHeight: CGFloat = 44 + 7 + 17
+        static let providerSlotWidth: CGFloat = 74
     }
 
     enum Palette {
@@ -43,6 +51,8 @@ enum Tokens {
         static let secondaryText = Color(white: 0.60)
         static let tertiaryText = Color(white: 0.42)
         static let track = Color(white: 0.20)
+        /// The disc a provider glyph sits on, inside its ring.
+        static let ringWell = Color(white: 0.15)
 
         static let normal = Color(red: 0.20, green: 0.82, blue: 0.35)
         static let warning = Color(red: 0.98, green: 0.79, blue: 0.10)
@@ -70,7 +80,8 @@ enum Tokens {
         static let collapsedProvider = Font.system(size: 12, weight: .medium)
         static let collapsedValue = Font.system(size: 12, weight: .semibold, design: .rounded)
         static let title = Font.system(size: 15, weight: .semibold)
-        static let ringValue = Font.system(size: 15, weight: .semibold, design: .rounded)
+        static let ringCaption = Font.system(size: 14, weight: .bold, design: .rounded)
+        static let cardTitle = Font.system(size: 13, weight: .semibold)
         static let rowLabel = Font.system(size: 11, weight: .medium)
         static let rowMeta = Font.system(size: 10.5, weight: .regular)
         static let switcher = Font.system(size: 10, weight: .medium)

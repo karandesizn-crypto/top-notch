@@ -49,14 +49,24 @@ object changing shape instead of a panel appearing.
 
 ```
         ✳ Claude  │ housing │  ◯ 73%
-        ╭──────────────────────────────╮
-        │  ◯     Current session  73%  │
-        │  73%   ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░    │
-        │        Resets in 51 min      │
-        │                              │
-        │   Claude  Codex  Cursor      │
-        ╰──────────────────────────────╯
+        ╭────────────────────────────────────╮
+        │  ◯     ◯     ◯     ◯               │
+        │ 73%   91%    —     —               │
+        │                                    │
+        │  ✳ Claude Usage             MAX    │
+        │  5-hour                            │
+        │  ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░               │
+        │  73% Used         Resets in 51 min │
+        │  Weekly                            │
+        │  ▓▓▓▓░░░░░░░░░░░░░░░               │
+        │  21% Used     Resets Tuesday 7 PM  │
+        ╰────────────────────────────────────╯
 ```
+
+Every enabled provider appears at once as a ring — glyph in a dark disc, usage arc around
+it, bold figure beneath — taken from the product's visual reference. Selecting a ring swaps
+the card beneath without moving the row. Unselected rings dim rather than disappear, so the
+row stays a stable target.
 
 Body height follows its content. A provider reporting one window does not reserve the room
 a two-window provider needs.
@@ -94,9 +104,14 @@ silhouette rather than the window rectangle.
 
 One source: `UsageState`, derived from the user's configured thresholds by
 `UsageStateEvaluator`. There is deliberately no second colour ramp — two systems would let
-the ring disagree with the alerts.
+the ring disagree with the alerts. An earlier build had one; it was removed.
 
-An earlier build did have a separate continuous ramp for the ring. It was removed.
+Because there is only one system, the *thresholds themselves* carry the design intent.
+They default to **50% warning / 70% critical**, which is what makes 21% read calm, 52%
+noticed, and 73% hot, matching the visual reference. That is lower than the 80/90 in
+`backend/supabase/schema.sql`; under those values 73% renders as normal green, which
+contradicts the design. Both are user-adjustable in Settings, and alerts fire once per
+escalation per window, so the lower defaults do not multiply notifications.
 
 ## Motion
 

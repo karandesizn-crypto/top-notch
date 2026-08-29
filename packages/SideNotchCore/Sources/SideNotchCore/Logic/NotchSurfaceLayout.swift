@@ -22,8 +22,10 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     /// Height of one usage-window row in the expanded body.
     public let contentRowHeight: CGFloat
     public let contentRowSpacing: CGFloat
-    /// Height of the provider switcher, when more than one provider is shown.
+    /// Height of the provider ring row, when more than one provider is shown.
     public let switcherHeight: CGFloat
+    /// Height of the detail card's title line.
+    public let cardTitleHeight: CGFloat
     public let bodyVerticalPadding: CGFloat
     /// The expanded body is never shorter than this, so the usage ring always fits.
     public let minimumBodyHeight: CGFloat
@@ -40,7 +42,8 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         minimumRowHeight: CGFloat,
         contentRowHeight: CGFloat = 48,
         contentRowSpacing: CGFloat = 10,
-        switcherHeight: CGFloat = 36,
+        switcherHeight: CGFloat = 80,
+        cardTitleHeight: CGFloat = 24,
         bodyVerticalPadding: CGFloat = 14,
         minimumBodyHeight: CGFloat = 78
     ) {
@@ -53,6 +56,7 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.contentRowHeight = contentRowHeight
         self.contentRowSpacing = contentRowSpacing
         self.switcherHeight = switcherHeight
+        self.cardTitleHeight = cardTitleHeight
         self.bodyVerticalPadding = bodyVerticalPadding
         self.minimumBodyHeight = minimumBodyHeight
     }
@@ -86,7 +90,7 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         let rowsHeight = CGFloat(rows) * contentRowHeight
             + CGFloat(rows - 1) * contentRowSpacing
         let switcher = hasSwitcher ? switcherHeight : 0
-        let total = bodyVerticalPadding * 2 + rowsHeight + switcher
+        let total = bodyVerticalPadding * 2 + cardTitleHeight + rowsHeight + switcher
         return max(total, minimumBodyHeight + switcher)
     }
 

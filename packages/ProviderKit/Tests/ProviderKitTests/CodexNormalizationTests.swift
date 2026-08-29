@@ -89,15 +89,16 @@ struct CodexNormalizationTests {
 
 @Suite("Usage state thresholds")
 struct UsageStateTests {
-    @Test(
-        "state boundaries",
-        arguments: [
-            (0.0, UsageState.normal), (0.79, .normal),
-            (0.80, .warning), (0.89, .warning),
-            (0.90, .critical), (0.99, .critical),
-            (1.0, .exhausted), (1.4, .exhausted),
-        ]
-    )
+    // Precomputed: the compiler cannot type-check arithmetic inside `arguments`.
+    static let boundaryCases: [(Double, UsageState)] = [
+        (0.0, .normal), (0.21, .normal), (0.49, .normal),
+        (0.50, .warning), (0.52, .warning), (0.69, .warning),
+        (0.70, .critical), (0.73, .critical), (0.99, .critical),
+        (1.0, .exhausted), (1.4, .exhausted),
+    ]
+
+    /// The boundaries encode the reference design: 21% calm, 52% noticed, 73% hot.
+    @Test("state boundaries", arguments: UsageStateTests.boundaryCases)
     func boundaries(fraction: Double, expected: UsageState) {
         #expect(UsageStateEvaluator.state(forUsedFraction: fraction) == expected)
     }

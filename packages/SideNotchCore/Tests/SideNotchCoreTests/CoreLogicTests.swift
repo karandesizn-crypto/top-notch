@@ -72,17 +72,23 @@ struct ResetCalculatorTests {
 struct SnapshotTests {
     let now = Date()
 
-    private func snapshot(_ fractions: [Double?]) -> UsageSnapshot {
+    /// Windows are built with explicit states so these assertions test "worst wins"
+    /// rather than whatever the default thresholds happen to be.
+    private func snapshot(states windows: [(Double?, UsageState)]) -> UsageSnapshot {
         UsageSnapshot(
             provider: .codex,
-            windows: fractions.enumerated().map { index, fraction in
+            windows: windows.enumerated().map { index, entry in
                 UsageWindow(
-                    id: "w\(index)", label: "w\(index)", usedFraction: fraction,
-                    state: UsageStateEvaluator.state(forUsedFraction: fraction)
+                    id: "w\(index)", label: "w\(index)",
+                    usedFraction: entry.0, state: entry.1
                 )
             },
             lastUpdated: now
         )
+    }
+
+    private func snapshot(_ fractions: [Double?]) -> UsageSnapshot {
+        snapshot(states: fractions.map { ($0, UsageStateEvaluator.state(forUsedFraction: $0)) })
     }
 
     @Test("the headline is the most constrained window")
@@ -99,9 +105,11 @@ struct SnapshotTests {
 
     @Test("overall state is the worst window's state")
     func overallState() {
-        #expect(snapshot([0.1, 0.85]).overallState == .warning)
-        #expect(snapshot([0.1, 0.95]).overallState == .critical)
-        #expect(snapshot([1.0, 0.1]).overallState == .exhausted)
+        #expect(snapshot(states: [(0.1, .normal), (0.6, .warning)]).overallState == .warning)
+        #expect(snapshot(states: [(0.1, .normal), (0.8, .critical)]).overallState == .critical)
+        #expect(snapshot(states: [(1.0, .exhausted), (0.1, .normal)]).overallState == .exhausted)
+        // An unavailable window never outranks a real measurement.
+        #expect(snapshot(states: [(nil, .unavailable), (0.6, .warning)]).overallState == .warning)
     }
 
     @Test("an unavailable snapshot reports unavailable regardless of stale windows")
