@@ -14,6 +14,9 @@ import ProviderKit
 final class DisplayPlacementService {
     private(set) var display: DisplayMetrics
     private(set) var notch: NotchMetrics
+    /// False when no attached display is a suitable home for the surface, in which case it
+    /// is hidden rather than parked at some display's top edge.
+    private(set) var hasSuitableDisplay: Bool = false
 
     /// Called after any change, so the window can re-pin itself.
     var onChange: (() -> Void)?
@@ -22,12 +25,17 @@ final class DisplayPlacementService {
     /// the observers, which block-based observers do not do for themselves.
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
-    init() {
+    /// Whether displays without a housing are acceptable. Supplied by settings.
+    private let allowsDisplaysWithoutNotch: () -> Bool
+
+    init(allowsDisplaysWithoutNotch: @escaping () -> Bool = { false }) {
+        self.allowsDisplaysWithoutNotch = allowsDisplaysWithoutNotch
         // Computed into locals first: @Observable routes property reads through accessors,
         // which are unavailable until every stored property is initialized.
-        let metrics = Self.metrics(for: Self.preferredScreen())
-        display = metrics
-        notch = NotchPlacement.metrics(for: metrics)
+        let resolved = Self.resolve(allowingWithoutNotch: allowsDisplaysWithoutNotch())
+        display = resolved.metrics
+        notch = NotchPlacement.metrics(for: resolved.metrics)
+        hasSuitableDisplay = resolved.isSuitable
         observeEnvironment()
     }
 
@@ -38,22 +46,38 @@ final class DisplayPlacementService {
         }
     }
 
-    /// Recomputes from the current screen. Safe to call often; only reports real changes.
+    /// Recomputes from the current screens. Safe to call often; only reports real changes.
     func refresh() {
-        let screen = Self.preferredScreen()
-        let newDisplay = Self.metrics(for: screen)
-        let newNotch = NotchPlacement.metrics(for: newDisplay)
+        let resolved = Self.resolve(allowingWithoutNotch: allowsDisplaysWithoutNotch())
+        let newNotch = NotchPlacement.metrics(for: resolved.metrics)
 
-        guard newDisplay != display || newNotch != notch else { return }
-        display = newDisplay
+        guard resolved.metrics != display || newNotch != notch
+            || resolved.isSuitable != hasSuitableDisplay else { return }
+
+        display = resolved.metrics
         notch = newNotch
-        Log.app.debug("display changed: notch \(newNotch.hasPhysicalNotch ? "yes" : "no")")
+        hasSuitableDisplay = resolved.isSuitable
+        Log.app.debug("display changed: suitable \(resolved.isSuitable ? "yes" : "no")")
         onChange?()
     }
 
-    /// The display carrying the menu bar and keyboard focus.
-    private static func preferredScreen() -> NSScreen? {
-        NSScreen.main ?? NSScreen.screens.first
+    /// Chooses the display for the surface, deferring the rule itself to `NotchPlacement`
+    /// so it stays testable away from AppKit.
+    private static func resolve(
+        allowingWithoutNotch: Bool
+    ) -> (metrics: DisplayMetrics, isSuitable: Bool) {
+        let screens = NSScreen.screens
+        let all = screens.map { metrics(for: $0) }
+        let mainIndex = NSScreen.main.flatMap { screens.firstIndex(of: $0) }
+
+        guard let index = NotchPlacement.preferredDisplayIndex(
+            among: all, mainIndex: mainIndex, allowingDisplaysWithoutNotch: allowingWithoutNotch
+        ) else {
+            // Keep the last known geometry so the window has something coherent to sit on
+            // while hidden; `isSuitable` is what actually gates visibility.
+            return (all.first ?? metrics(for: nil), false)
+        }
+        return (all[index], true)
     }
 
     private static func metrics(for screen: NSScreen?) -> DisplayMetrics {

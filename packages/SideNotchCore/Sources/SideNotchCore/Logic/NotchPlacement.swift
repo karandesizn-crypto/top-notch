@@ -125,6 +125,38 @@ public enum NotchPlacement {
         return CGRect(x: x, y: y, width: size.width, height: size.height)
     }
 
+    /// Picks the display the surface belongs on.
+    ///
+    /// A notched display wins over the focused one. SideNotch is a notch tool: on a display
+    /// without a housing it has nothing to attach to and just floats over whatever window
+    /// is at the top edge, which reads as a bug. Preferring the built-in screen also means
+    /// the surface stays put while the user works on an external monitor.
+    ///
+    /// - Parameters:
+    ///   - displays: attached displays.
+    ///   - mainIndex: index of the focused display, when known.
+    ///   - allowingDisplaysWithoutNotch: escape hatch for Macs with no notch at all —
+    ///     without it, those users would never see the surface.
+    /// - Returns: index into `displays`, or nil when the surface should be hidden.
+    public static func preferredDisplayIndex(
+        among displays: [DisplayMetrics],
+        mainIndex: Int?,
+        allowingDisplaysWithoutNotch: Bool
+    ) -> Int? {
+        guard !displays.isEmpty else { return nil }
+
+        let notched = displays.indices.filter { metrics(for: displays[$0]).hasPhysicalNotch }
+        if !notched.isEmpty {
+            // If the focused display is itself notched, prefer it; otherwise the first.
+            if let mainIndex, notched.contains(mainIndex) { return mainIndex }
+            return notched.first
+        }
+
+        guard allowingDisplaysWithoutNotch else { return nil }
+        if let mainIndex, displays.indices.contains(mainIndex) { return mainIndex }
+        return displays.indices.first
+    }
+
     /// Rounds a length to whole pixels on the display, so edges and hairlines stay crisp
     /// on Retina rather than landing on a half pixel.
     public static func pixelAligned(_ value: CGFloat, scale: CGFloat) -> CGFloat {

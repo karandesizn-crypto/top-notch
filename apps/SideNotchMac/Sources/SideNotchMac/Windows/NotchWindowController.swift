@@ -76,7 +76,6 @@ final class NotchWindowController {
     func show() {
         applyAppearance()
         applyPlacement()
-        window.orderFrontRegardless()
         installEscapeMonitor()
     }
 
@@ -91,11 +90,20 @@ final class NotchWindowController {
     /// Called on launch and on every display change; a resolution or scaling change alters
     /// the housing's measured size, so the window is resized as well as moved.
     func applyPlacement() {
+        // No suitable display means no surface at all. Parking it at some display's top
+        // edge with nothing to attach to reads as a bug, and the menu bar item remains the
+        // way in.
+        guard placement.hasSuitableDisplay else {
+            window.orderOut(nil)
+            return
+        }
+
         let layout = currentLayout()
         let frame = NotchPlacement.surfaceFrame(
             size: layout.windowSize, metrics: placement.notch, display: placement.display
         )
         window.setFrame(frame, display: true)
+        window.orderFrontRegardless()
         hosting?.rootView = NotchHost(
             store: store, settings: settings, surface: surface, layout: layout,
             onAddProvider: { [weak self] in self?.onAddProvider?() }
@@ -163,6 +171,7 @@ final class NotchWindowController {
         lines.append("screens        \(NSScreen.screens.count)")
         lines.append("display        \(Int(display.frame.width))x\(Int(display.frame.height)) @\(display.backingScaleFactor)x")
         lines.append("physical notch \(notch.hasPhysicalNotch ? "yes" : "no")")
+        lines.append("surface shown  \(placement.hasSuitableDisplay ? "yes" : "no")")
         lines.append("housing        \(notch.notchWidth)x\(notch.notchHeight) centred at x=\(notch.centerX)")
         lines.append("anchor top y   \(notch.anchorTopY)")
         lines.append("providers      \(store.visibleProviders.count)")

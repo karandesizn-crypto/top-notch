@@ -405,3 +405,56 @@ struct ProviderIDTests {
         #expect(ProviderID.slug(from: title) == expected)
     }
 }
+
+@Suite("Choosing a display")
+struct PreferredDisplayTests {
+    let notched = NotchPlacementTests.notchedDisplay
+    let external = NotchPlacementTests.externalDisplay
+
+    @Test("the notched display wins even when an external one has focus")
+    func prefersNotchedOverFocused() {
+        // Working on the external monitor must not drag the surface off the notch.
+        let index = NotchPlacement.preferredDisplayIndex(
+            among: [notched, external], mainIndex: 1, allowingDisplaysWithoutNotch: false
+        )
+        #expect(index == 0)
+    }
+
+    @Test("a lone external display hides the surface by default")
+    func hidesWithoutNotch() {
+        // Nothing to attach to: it would float over whatever window is at the top edge.
+        #expect(NotchPlacement.preferredDisplayIndex(
+            among: [external], mainIndex: 0, allowingDisplaysWithoutNotch: false
+        ) == nil)
+    }
+
+    @Test("Macs with no notch at all can opt in")
+    func optInWithoutNotch() {
+        // Without this escape hatch those users would never see the surface.
+        #expect(NotchPlacement.preferredDisplayIndex(
+            among: [external], mainIndex: 0, allowingDisplaysWithoutNotch: true
+        ) == 0)
+    }
+
+    @Test("opting in still prefers a notched display when one is attached")
+    func optInStillPrefersNotch() {
+        #expect(NotchPlacement.preferredDisplayIndex(
+            among: [external, notched], mainIndex: 0, allowingDisplaysWithoutNotch: true
+        ) == 1)
+    }
+
+    @Test("no displays yields nothing rather than a crash")
+    func noDisplays() {
+        #expect(NotchPlacement.preferredDisplayIndex(
+            among: [], mainIndex: nil, allowingDisplaysWithoutNotch: true
+        ) == nil)
+    }
+
+    @Test("an out-of-range focused index falls back to the first display")
+    func staleMainIndex() {
+        // A display can be unplugged between the index being read and being used.
+        #expect(NotchPlacement.preferredDisplayIndex(
+            among: [external], mainIndex: 7, allowingDisplaysWithoutNotch: true
+        ) == 0)
+    }
+}

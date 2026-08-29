@@ -24,12 +24,21 @@ The housing's width is a hole in the layout, not a spacer with something behind 
 can render over the camera, so the row reserves its measured width and splits the chips
 around it — the extra one going left when the count is odd.
 
-### Displays without a housing
+### Which display, and when nothing shows
 
-`safeAreaInsets.top` is zero, so the surface anchors to the *bottom* of the menu bar and
-hangs below it instead. Occupying the menu bar row there would cover real menu items, since
-a non-notched Mac has no dead zone in the middle to borrow. The reserved housing width
-becomes zero and the two flanks meet, giving one contiguous row.
+A notched display always wins, even when an external monitor has focus. Two reasons: the
+surface has nothing to attach to on a display without a housing — it just floats over
+whatever window is at the top edge — and pinning it to the built-in screen means it stays
+put while the user works on the external one.
+
+**With no notched display attached, nothing is shown at all.** The menu bar item remains
+the way in. "Show on displays without a notch" in Settings opts back in, for Macs that have
+no notch at all; there the surface anchors below the menu bar rather than over it, since a
+non-notched Mac has no dead zone in the middle to borrow, and the reserved housing width
+becomes zero so the two flanks meet.
+
+The rule lives in `NotchPlacement.preferredDisplayIndex`, away from AppKit, so the cases
+that need hardware to reproduce are unit tested instead.
 
 ### What this costs
 

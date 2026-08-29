@@ -35,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: settings, cache: cache, notifications: notifications,
             providerOverride: providerOverride
         )
-        placement = DisplayPlacementService()
+        placement = DisplayPlacementService { [weak self] in
+            self?.settings.showsWithoutNotch ?? false
+        }
         controller = NotchWindowController(
             store: store, settings: settings, placement: placement
         )
@@ -124,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance()
         controller.applyAppearance()
         controller.reconcileSelection()
+        // Re-resolve first: the display rule itself may have changed.
+        placement.refresh()
         controller.applyPlacement()
         settingsWindow?.appearance = settings.appearance.nsAppearance
         notifications.reset()

@@ -69,6 +69,14 @@ final class AppSettings {
     var criticalThreshold: Double { didSet { store(criticalThreshold, .criticalThreshold) } }
     var notificationsEnabled: Bool { didSet { store(notificationsEnabled, .notificationsEnabled) } }
     var appearance: AppearanceMode { didSet { store(appearance.rawValue, .appearance) } }
+    /// Show the surface on displays with no camera housing.
+    ///
+    /// Off by default: with nothing to attach to, the surface floats over whatever window
+    /// sits at the top edge. On by choice for Macs that have no notch at all, where it is
+    /// the only way to see the surface.
+    var showsWithoutNotch: Bool {
+        didSet { store(showsWithoutNotch, .showsWithoutNotch) }
+    }
 
     var thresholds: UsageThresholds {
         UsageThresholds(warning: warningThreshold / 100, critical: criticalThreshold / 100)
@@ -84,7 +92,7 @@ final class AppSettings {
     private enum Key: String {
         case enabledProviders, customProviders, launchAtLogin, refreshInterval
         case showPercentages, showResetCountdown, warningThreshold, criticalThreshold
-        case notificationsEnabled, appearance
+        case notificationsEnabled, appearance, showsWithoutNotch
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -120,6 +128,7 @@ final class AppSettings {
         appearance = AppearanceMode(
             rawValue: defaults.string(forKey: Key.appearance.rawValue) ?? ""
         ) ?? .system
+        showsWithoutNotch = defaults.object(forKey: Key.showsWithoutNotch.rawValue) as? Bool ?? false
     }
 
     func isEnabled(_ provider: ProviderID) -> Bool { enabledProviders.contains(provider) }

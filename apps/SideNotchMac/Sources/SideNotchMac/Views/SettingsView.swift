@@ -135,6 +135,18 @@ struct SettingsView: View {
                 Toggle("Show percentages in the collapsed tab", isOn: $settings.showPercentages)
                 Toggle("Show reset countdown", isOn: $settings.showResetCountdown)
             }
+
+            Section {
+                Toggle("Show on displays without a notch", isOn: Binding(
+                    get: { settings.showsWithoutNotch },
+                    set: { settings.showsWithoutNotch = $0; onSettingsChanged() }
+                ))
+            } footer: {
+                Text("SideNotch lives in the camera notch. On a display without one it has "
+                     + "nothing to attach to, so it stays hidden and the menu bar item is "
+                     + "the way in. Turn this on if your Mac has no notch at all.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
