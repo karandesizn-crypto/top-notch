@@ -178,11 +178,15 @@ final class UsageStore {
         lastRefresh = now
     }
 
-    /// Shortest time a refresh is allowed to appear to take.
+    /// Shortest time a refresh is allowed to appear to take: one full turn of the sweep.
     ///
     /// A local read can return in a few milliseconds, which would make the ring's sweep a
-    /// flash rather than an animation — and leave the user unsure the click registered.
-    static let minimumVisibleRefresh: Duration = .milliseconds(480)
+    /// flash rather than an animation. Matching the sweep's own 1.3s period means it
+    /// completes a revolution and comes to rest where it started, instead of stopping a
+    /// third of the way round.
+    ///
+    /// This delays only the indicator. The figures are published the moment they arrive.
+    static let minimumVisibleRefresh: Duration = .milliseconds(1300)
 
     /// Refreshes every visible provider, one shortly after the next.
     ///

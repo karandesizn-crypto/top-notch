@@ -116,11 +116,15 @@ the one clicked. Each ring shows a bright arc travelling around it while its rea
 flight, layered over the existing figure rather than replacing it, so the numbers stay
 readable during the refresh instead of blinking away.
 
+Each sweep is a **separate, smaller ring inside the usage track**, not layered over it —
+overlaying the two meant the sweep obscured the very figure it was refreshing. It turns once
+every 1.3s, both measured off the product's demo recording rather than guessed.
+
 The reads are staggered by 90ms so the rings animate as a cascade rather than in unison,
-which reads as the surface responding rather than as a glitch. A refresh also holds its
-indicator for at least 480ms: a local read can return in a few milliseconds, which would
-make the sweep a flash and leave the user unsure the click registered. The figures
-themselves are published as soon as they arrive; only the indicator waits.
+which reads as the surface responding rather than as a glitch. A refresh holds its indicator
+for one full turn — 1.3s — so the sweep completes a revolution and comes to rest where it
+started, instead of stopping a third of the way round when a local read returns in
+milliseconds. Only the indicator waits; the figures are published the moment they arrive.
 
 Re-reading on click is the point: a deliberate click usually means *is this still true?*,
 and the sweep answers that the question was heard even when the figure comes back unchanged.
