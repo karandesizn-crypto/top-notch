@@ -9,6 +9,7 @@ enum CodexSnapshotMapper {
 
     static func snapshot(
         from response: GetAccountRateLimitsResponse,
+        tokenUsage: GetAccountTokenUsageResponse? = nil,
         thresholds: UsageThresholds = .default,
         now: Date = Date()
     ) -> UsageSnapshot {
@@ -51,6 +52,14 @@ enum CodexSnapshotMapper {
             metadata["spendUsed"] = spend.used
             metadata["spendLimit"] = spend.limit
         }
+        if let tokenUsage {
+            if let today = tokensToday(from: tokenUsage, now: now) {
+                metadata["tokensToday"] = String(today)
+            }
+            if let lifetime = tokenUsage.summary?.lifetimeTokens {
+                metadata["tokensLifetime"] = String(lifetime)
+            }
+        }
 
         return UsageSnapshot(
             provider: .codex,
@@ -64,6 +73,21 @@ enum CodexSnapshotMapper {
             lastUpdated: now,
             metadata: metadata
         )
+    }
+
+    /// Tokens spent today, when the account has a bucket for today.
+    ///
+    /// Buckets are keyed by ISO day in the account's own reckoning; the comparison uses the
+    /// local calendar, which is what the user means by "today". A missing bucket means no
+    /// usage today, and returns nil rather than zero so the UI can omit the line entirely.
+    static func tokensToday(from usage: GetAccountTokenUsageResponse, now: Date) -> Int64? {
+        guard let buckets = usage.dailyUsageBuckets else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: now)
+        return buckets.first { $0.startDate == today }?.tokens
     }
 
     private static func window(

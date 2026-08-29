@@ -8,7 +8,6 @@ let providers: [any UsageProvider] = [
     CodexUsageProvider(),
     ClaudeUsageProvider(),
     CursorUsageProvider(),
-    ChatGPTUsageProvider(),
 ]
 
 let staleness = StalenessPolicy.default

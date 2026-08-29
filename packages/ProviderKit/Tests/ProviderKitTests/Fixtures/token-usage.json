@@ -1,0 +1,13 @@
+{
+  "summary": {
+    "lifetimeTokens": 2723432,
+    "peakDailyTokens": 2151685,
+    "longestRunningTurnSec": 320,
+    "currentStreakDays": 0,
+    "longestStreakDays": 2
+  },
+  "dailyUsageBuckets": [
+    { "startDate": "2026-06-07", "tokens": 364561 },
+    { "startDate": "2026-08-29", "tokens": 2151685 }
+  ]
+}

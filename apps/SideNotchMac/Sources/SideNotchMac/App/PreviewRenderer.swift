@@ -19,7 +19,11 @@ enum PreviewRenderer {
         selected: ProviderID?,
         expanded: Bool
     ) {
-        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
+        let layout = SurfaceSizing.layout(
+            providerCount: store.visibleProviders.count,
+            showsFigures: settings.showPercentages,
+            showsAddButton: settings.canAddProvider
+        )
 
         let state = NotchSurfaceState()
         state.isExpanded = expanded

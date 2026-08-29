@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: store, settings: settings, placement: placement
         )
         controller.reconcileSelection()
+        controller.onAddProvider = { [weak self] in self?.openSettings() }
 
         if handleDiagnosticModes() { return }
 

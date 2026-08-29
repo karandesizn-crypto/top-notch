@@ -154,3 +154,57 @@ struct ProviderErrorTests {
         await #expect(throws: ProviderError.self) { try await cursor.fetchSnapshot() }
     }
 }
+
+@Suite("Codex token usage")
+struct CodexTokenUsageTests {
+    private func usageFixture() throws -> GetAccountTokenUsageResponse {
+        let url = Bundle.module.resourceURL!
+            .appendingPathComponent("Fixtures/token-usage.json")
+        return try JSONDecoder().decode(
+            GetAccountTokenUsageResponse.self, from: Data(contentsOf: url)
+        )
+    }
+
+    /// Local noon on 2026-08-29, the day the fixture has a bucket for. Local rather than
+    /// UTC because the lookup uses the local calendar — which is what "today" means to the
+    /// person reading the tab.
+    private var onThatDay: Date {
+        var components = DateComponents()
+        components.year = 2026; components.month = 8; components.day = 29; components.hour = 12
+        return Calendar.current.date(from: components)!
+    }
+
+    @Test("today's bucket is found by local calendar day")
+    func tokensToday() throws {
+        let usage = try usageFixture()
+        #expect(CodexSnapshotMapper.tokensToday(from: usage, now: onThatDay) == 2_151_685)
+    }
+
+    @Test("a day with no bucket reports nothing rather than zero")
+    func noBucketForToday() throws {
+        let usage = try usageFixture()
+        let laterDay = onThatDay.addingTimeInterval(40 * 86400)
+        // Nil, not 0: the UI omits the line instead of claiming no usage.
+        #expect(CodexSnapshotMapper.tokensToday(from: usage, now: laterDay) == nil)
+    }
+
+    @Test("token totals ride along in metadata without touching the windows")
+    func metadata() throws {
+        let limits = try decodeFixture("rate-limits-primary-only")
+        let snapshot = CodexSnapshotMapper.snapshot(
+            from: limits, tokenUsage: try usageFixture(), now: onThatDay
+        )
+        #expect(snapshot.metadata["tokensToday"] == "2151685")
+        #expect(snapshot.metadata["tokensLifetime"] == "2723432")
+        #expect(snapshot.windows.count == 1)   // unchanged by the extra read
+    }
+
+    @Test("a missing token read leaves the snapshot otherwise intact")
+    func absentTokenUsage() throws {
+        let limits = try decodeFixture("rate-limits-primary-only")
+        let snapshot = CodexSnapshotMapper.snapshot(from: limits, tokenUsage: nil)
+        #expect(snapshot.metadata["tokensToday"] == nil)
+        #expect(snapshot.windows.count == 1)
+        #expect(snapshot.plan == "go")
+    }
+}

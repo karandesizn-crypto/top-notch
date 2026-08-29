@@ -17,6 +17,7 @@ actor CodexAppServerClient {
         static let initialize = "initialize"
         static let initialized = "initialized"
         static let readRateLimits = "account/rateLimits/read"
+        static let readTokenUsage = "account/usage/read"
         static let rateLimitsUpdated = "account/rateLimits/updated"
     }
 

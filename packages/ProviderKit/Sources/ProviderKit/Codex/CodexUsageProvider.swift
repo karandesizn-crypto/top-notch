@@ -56,7 +56,16 @@ public final class CodexUsageProvider: UsageProvider, @unchecked Sendable {
             throw ProviderError.unknown(detail: "rate limit read failed")
         }
 
-        let snapshot = CodexSnapshotMapper.snapshot(from: response, thresholds: thresholds)
+        // Token totals are a second, optional read: useful colour, but a failure here must
+        // not cost the user their rate-limit figures.
+        let tokenUsage = try? await client.request(
+            CodexAppServerClient.Method.readTokenUsage,
+            as: GetAccountTokenUsageResponse.self
+        )
+
+        let snapshot = CodexSnapshotMapper.snapshot(
+            from: response, tokenUsage: tokenUsage, thresholds: thresholds
+        )
         Log.codex.debug("read \(snapshot.windows.count) usage window(s)")
         return snapshot
     }

@@ -26,6 +26,8 @@ struct NotchRootView: View {
     @Bindable var settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout
+    /// Opens settings so another tool can be added.
+    var onAddProvider: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -71,9 +73,12 @@ struct NotchRootView: View {
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: size.height)
         .onHover { hovering in
-            guard !surface.isPinned else { return }
+            // Leaving the tab collapses it. Entering does not expand on its own: a chip
+            // has to be hovered, so the card always describes something specific rather
+            // than whatever happened to be selected last.
+            guard !surface.isPinned, !hovering else { return }
             withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                surface.isExpanded = hovering
+                surface.isExpanded = false
             }
         }
         .onTapGesture { togglePinned() }
@@ -103,9 +108,28 @@ struct NotchRootView: View {
             ForEach(providers) { provider in
                 chip(provider)
             }
+            if layout.showsAddButton {
+                addButton
+            }
         }
         .padding(.horizontal, layout.horizontalPadding + layout.flare)
         .frame(height: layout.collapsedHeight)
+    }
+
+    private var addButton: some View {
+        Button(action: onAddProvider) {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Tokens.Palette.secondaryText)
+                .frame(width: layout.addChipWidth, height: layout.collapsedHeight - 8)
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a tool")
     }
 
     private func chip(_ provider: ProviderID) -> some View {
@@ -134,7 +158,7 @@ struct NotchRootView: View {
                         .monospacedDigit()
                 }
             }
-            .frame(width: layout.chipWidth, height: layout.collapsedHeight - 6)
+            .frame(width: layout.chipWidth, height: layout.collapsedHeight - 8)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -145,6 +169,14 @@ struct NotchRootView: View {
         }
         .buttonStyle(.plain)
         .animation(Tokens.Motion.content(reduceMotion: reduceMotion), value: surface.selected)
+        // Hovering a chip is what opens the card, and which chip decides what it shows.
+        .onHover { hovering in
+            guard hovering, !surface.isPinned else { return }
+            withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
+                surface.selected = provider
+                surface.isExpanded = true
+            }
+        }
         .accessibilityLabel(label(for: providerStatus))
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
@@ -159,6 +191,12 @@ struct NotchRootView: View {
                 Text("\(settings.displayName(for: surface.selected)) Usage")
                     .font(Tokens.Type_.cardTitle)
                 Spacer(minLength: 6)
+                if let tokens = tokensTodayText {
+                    Text(tokens)
+                        .font(Tokens.Type_.rowMeta)
+                        .foregroundStyle(Tokens.Palette.tertiaryText)
+                        .monospacedDigit()
+                }
                 if let plan = status?.snapshot?.plan {
                     Text(plan.uppercased())
                         .font(Tokens.Type_.rowMeta)
@@ -241,6 +279,27 @@ struct NotchRootView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// "2.2M today" when the provider reports token totals.
+    ///
+    /// This is not a context window. A context window is per-conversation state and no
+    /// provider exposes one for a client that owns no conversation, so none is shown.
+    private var tokensTodayText: String? {
+        guard let raw = status?.snapshot?.metadata["tokensToday"],
+              let tokens = Int64(raw), tokens > 0
+        else { return nil }
+
+        let formatted: String
+        switch tokens {
+        case 1_000_000...:
+            formatted = String(format: "%.1fM", Double(tokens) / 1_000_000)
+        case 1_000...:
+            formatted = "\(tokens / 1_000)K"
+        default:
+            formatted = "\(tokens)"
+        }
+        return "\(formatted) today"
     }
 
     private func caption(for status: ProviderStatus?) -> String {

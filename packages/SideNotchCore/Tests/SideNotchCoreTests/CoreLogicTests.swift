@@ -278,12 +278,23 @@ struct NotchSurfaceLayoutTests {
     @Test("the collapsed tab is only as wide as its providers need")
     func collapsedWidthFollowsProviderCount() {
         #expect(three.collapsedSize.height == 30)
-        // Three 62pt chips, 11pt padding and a 10pt flare either side.
-        #expect(three.collapsedSize.width == 228)
+        // Three 30pt chips, a 26pt add button, 11pt padding and a 10pt flare either side.
+        #expect(three.collapsedSize.width == 158)
 
         let five = NotchSurfaceLayout(providerCount: 5)
-        #expect(five.collapsedSize.width > three.collapsedSize.width)
-        #expect(five.collapsedSize.width - three.collapsedSize.width == 124)   // two chips
+        #expect(five.collapsedSize.width - three.collapsedSize.width == 60)   // two chips
+    }
+
+    @Test("hiding the add button reclaims its width")
+    func addButtonWidth() {
+        let without = NotchSurfaceLayout(providerCount: 3, showsAddButton: false)
+        #expect(three.collapsedSize.width - without.collapsedSize.width == 26)
+    }
+
+    @Test("showing figures widens the chips rather than the padding")
+    func figuresWidenChips() {
+        let withFigures = NotchSurfaceLayout(providerCount: 3, chipWidth: 58)
+        #expect(withFigures.collapsedSize.width - three.collapsedSize.width == 84)  // 3 x 28
     }
 
     @Test("the collapsed tab stays compact next to the expanded panel")
@@ -330,9 +341,9 @@ struct NotchSurfaceLayoutTests {
 
     @Test("many providers widen the collapsed tab past the expanded panel")
     func manyProviders() {
-        // Six chips exceed the fixed expanded width, so the window must follow the wider of
-        // the two rather than clipping the collapsed tab.
-        let many = NotchSurfaceLayout(providerCount: 6)
+        // With figures shown, six chips exceed the fixed expanded width, so the window must
+        // follow the wider of the two rather than clipping the collapsed tab.
+        let many = NotchSurfaceLayout(providerCount: 6, chipWidth: 58)
         #expect(many.collapsedSize.width > 322)
         #expect(many.windowSize.width == many.collapsedSize.width)
         #expect(many.expandedSize(rowCount: 1).width == many.collapsedSize.width)

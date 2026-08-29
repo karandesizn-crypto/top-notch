@@ -18,12 +18,15 @@ final class NotchWindowController {
     var windowFrame: NSRect { window.frame }
     var notch: NotchMetrics { placement.notch }
 
+    /// Opens settings so another tool can be added; wired by the app delegate.
+    var onAddProvider: (() -> Void)?
+
     init(store: UsageStore, settings: AppSettings, placement: DisplayPlacementService) {
         self.store = store
         self.settings = settings
         self.placement = placement
 
-        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
+        let layout = Self.layout(store: store, settings: settings)
         window = NotchWindow(contentRect: NSRect(origin: .zero, size: layout.windowSize))
 
         let container = PassthroughContentView(
@@ -33,7 +36,8 @@ final class NotchWindowController {
 
         let hosting = NSHostingView(
             rootView: NotchHost(
-                store: store, settings: settings, surface: surface, layout: layout
+                store: store, settings: settings, surface: surface, layout: layout,
+                onAddProvider: { }
             )
         )
         hosting.frame = container.bounds
@@ -46,7 +50,7 @@ final class NotchWindowController {
         container.interactiveRect = { [weak self] in
             guard let self else { return .zero }
             let windowSize = window.frame.size
-            let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
+            let layout = currentLayout()
             let size = SurfaceSizing.size(
                 layout: layout,
                 expanded: surface.isExpanded,
@@ -87,13 +91,14 @@ final class NotchWindowController {
     /// Called on launch and on every display change; a resolution or scaling change alters
     /// the housing's measured size, so the window is resized as well as moved.
     func applyPlacement() {
-        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
+        let layout = currentLayout()
         let frame = NotchPlacement.surfaceFrame(
             size: layout.windowSize, metrics: placement.notch, display: placement.display
         )
         window.setFrame(frame, display: true)
         hosting?.rootView = NotchHost(
-            store: store, settings: settings, surface: surface, layout: layout
+            store: store, settings: settings, surface: surface, layout: layout,
+            onAddProvider: { [weak self] in self?.onAddProvider?() }
         )
     }
 
@@ -131,11 +136,26 @@ final class NotchWindowController {
         }
     }
 
+    /// Layout for the current provider count and preferences.
+    ///
+    /// Static so the initializer can call it before `self` exists.
+    private static func layout(store: UsageStore, settings: AppSettings) -> NotchSurfaceLayout {
+        SurfaceSizing.layout(
+            providerCount: store.visibleProviders.count,
+            showsFigures: settings.showPercentages,
+            showsAddButton: settings.canAddProvider
+        )
+    }
+
+    private func currentLayout() -> NotchSurfaceLayout {
+        Self.layout(store: store, settings: settings)
+    }
+
     /// Placement summary, for verifying multi-display behaviour without a screenshot.
     func placementDescription() -> String {
         let notch = placement.notch
         let display = placement.display
-        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
+        let layout = currentLayout()
         var lines: [String] = []
         lines.append("screens        \(NSScreen.screens.count)")
         lines.append("display        \(Int(display.frame.width))x\(Int(display.frame.height)) @\(display.backingScaleFactor)x")
@@ -157,8 +177,12 @@ struct NotchHost: View {
     let settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout
+    let onAddProvider: () -> Void
 
     var body: some View {
-        NotchRootView(store: store, settings: settings, surface: surface, layout: layout)
+        NotchRootView(
+            store: store, settings: settings, surface: surface,
+            layout: layout, onAddProvider: onAddProvider
+        )
     }
 }

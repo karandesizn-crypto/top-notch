@@ -109,7 +109,9 @@ final class AppSettings {
         let storedInterval = defaults.object(forKey: Key.refreshInterval.rawValue) as? Double ?? 300
         refreshInterval = min(max(storedInterval, Self.minimumRefreshInterval),
                               Self.maximumRefreshInterval)
-        showPercentages = defaults.object(forKey: Key.showPercentages.rawValue) as? Bool ?? true
+        // Off by default: the collapsed tab's job is to be small, and the ring colour
+        // already answers "is my usage okay?". Turning it on widens every chip.
+        showPercentages = defaults.object(forKey: Key.showPercentages.rawValue) as? Bool ?? false
         showResetCountdown = defaults.object(forKey: Key.showResetCountdown.rawValue) as? Bool ?? true
         // Percentage form of `UsageThresholds.default`.
         warningThreshold = defaults.object(forKey: Key.warningThreshold.rawValue) as? Double ?? 50

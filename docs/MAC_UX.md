@@ -31,24 +31,31 @@ Same shape, same behaviour, nothing covered.
 
 ### Collapsed
 
-One chip per provider — a small ring and its figure — and nothing else.
+One ring per provider, plus a `+` to add another. Nothing else.
 
 ```
-     ╭─────────────────────────────╮
-     │  ◔ 73%   ◔ 21%   ◔ 52%      │
-     ╰─────────────────────────────╯
+     ╭────────────────────╮
+     │  ◔   ◔   ◔    +    │
+     ╰────────────────────╯
 ```
 
-It answers one question: *is my usage okay?* The figure shown is the **most constrained**
-window, because that is the limit that will bite first.
+**158×30pt** with three tools. It answers one question — *is my usage okay?* — and the
+ring's colour answers it without needing a figure. Turning on "show percentages" widens
+every chip from 30pt to 58pt, which is why it is off by default: the collapsed tab's whole
+job is to be small.
 
-The tab is only as wide as its providers need — three chips is 228pt, four is 290pt.
+The figure behind each ring is the **most constrained** window, because that is the limit
+that will bite first.
 
 ### Expanded
 
+**Hovering a ring** opens the card for that provider. Entering the tab does not expand it on
+its own — a specific ring has to be hovered — so the card always describes something the
+pointer is actually on rather than whatever was selected last. Leaving the tab collapses it.
+
 The chip row does not move. It stays exactly where it is and doubles as the provider
-switcher; the detail card is revealed beneath it. Nothing relayouts, which is what makes it
-read as one surface changing shape rather than a panel appearing.
+switcher; the card is revealed beneath it. Nothing relayouts, which is what makes it read as
+one surface changing shape rather than a panel appearing.
 
 ```
      ╭─────────────────────────────╮
@@ -66,6 +73,16 @@ read as one surface changing shape rather than a panel appearing.
 
 Body height follows its content. A provider reporting one window does not reserve the room
 a two-window provider needs.
+
+Rows are whatever windows the provider actually reports — Claude's 5-hour and weekly,
+Codex's metered window — labelled from the provider's own data rather than from a fixed
+list. Codex also reports account token totals, shown as "2.2M today" beside the plan badge
+when there is usage that day.
+
+**There is no context-window row.** A context window is per-conversation state; Codex
+reports it through `thread/tokenUsage/updated` for a thread the client owns, and SideNotch
+owns no thread. Nothing available to an ambient account-level tool carries that figure, so
+none is shown rather than one invented.
 
 ## Providers
 

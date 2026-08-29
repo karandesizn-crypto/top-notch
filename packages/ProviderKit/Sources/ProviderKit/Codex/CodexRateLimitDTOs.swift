@@ -69,3 +69,30 @@ struct RateLimitResetCreditDTO: Decodable {
     let title: String?
     let description: String?
 }
+
+
+// MARK: - account/usage/read
+
+/// Token totals for the account.
+///
+/// Deliberately *not* a context window: that is per-thread state, reported through
+/// `thread/tokenUsage/updated` for a conversation the client owns. SideNotch owns no
+/// thread, so no context-window figure is available to it and none is invented.
+struct GetAccountTokenUsageResponse: Decodable {
+    let summary: TokenUsageSummaryDTO?
+    let dailyUsageBuckets: [DailyUsageBucketDTO]?
+}
+
+struct TokenUsageSummaryDTO: Decodable {
+    let lifetimeTokens: Int64?
+    let peakDailyTokens: Int64?
+    let longestRunningTurnSec: Int64?
+    let currentStreakDays: Int?
+    let longestStreakDays: Int?
+}
+
+struct DailyUsageBucketDTO: Decodable {
+    /// ISO day, e.g. "2026-08-29".
+    let startDate: String
+    let tokens: Int64
+}

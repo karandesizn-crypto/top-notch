@@ -8,8 +8,16 @@ import CoreGraphics
 /// lays out across the tab. That is both simpler and considerably smaller than spanning the
 /// menu bar row.
 public struct NotchSurfaceLayout: Sendable, Equatable {
-    /// Width of one provider chip in the collapsed tab: ring plus its figure.
+    /// Width of one provider chip in the collapsed tab.
+    ///
+    /// A ring on its own by default. Showing figures alongside widens every chip, which is
+    /// why it is a setting rather than always-on: the collapsed tab's whole job is to be
+    /// small, and the ring's colour already answers "is my usage okay?".
     public let chipWidth: CGFloat
+    /// Width of the trailing add button.
+    public let addChipWidth: CGFloat
+    /// Whether the add button is shown; hidden once the row is full.
+    public let showsAddButton: Bool
     public let collapsedHeight: CGFloat
     public let horizontalPadding: CGFloat
     /// Outward flare where the tab meets the chrome above it.
@@ -27,7 +35,9 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
 
     public init(
         providerCount: Int,
-        chipWidth: CGFloat = 62,
+        showsAddButton: Bool = true,
+        chipWidth: CGFloat = 30,
+        addChipWidth: CGFloat = 26,
         collapsedHeight: CGFloat = 30,
         horizontalPadding: CGFloat = 11,
         flare: CGFloat = 10,
@@ -38,7 +48,9 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         bodyVerticalPadding: CGFloat = 11
     ) {
         self.providerCount = max(providerCount, 1)
+        self.showsAddButton = showsAddButton
         self.chipWidth = chipWidth
+        self.addChipWidth = addChipWidth
         self.collapsedHeight = collapsedHeight
         self.horizontalPadding = horizontalPadding
         self.flare = flare
@@ -50,8 +62,10 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     }
 
     public var collapsedSize: CGSize {
-        CGSize(
-            width: chipWidth * CGFloat(providerCount) + horizontalPadding * 2 + flare * 2,
+        let chips = chipWidth * CGFloat(providerCount)
+        let add = showsAddButton ? addChipWidth : 0
+        return CGSize(
+            width: chips + add + horizontalPadding * 2 + flare * 2,
             height: collapsedHeight
         )
     }
