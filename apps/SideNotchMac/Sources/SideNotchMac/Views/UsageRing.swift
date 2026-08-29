@@ -1,83 +1,73 @@
 import SwiftUI
 import SideNotchCore
 
-/// A provider's ring: usage arc around a symbol, with the figure beneath.
+/// Reusable usage ring.
+///
+/// Colour comes from `UsageState`, which `UsageStateEvaluator` derives from the user's
+/// configured thresholds — the ring cannot disagree with the alerts because it has no
+/// threshold logic of its own.
 struct UsageRing: View {
-    let status: ProviderStatus
-    let isStale: Bool
-    let isFocused: Bool
-    let showPercentage: Bool
+    let state: UsageState
+    /// 0...1, or nil when the provider reports no measurement.
+    let fraction: Double?
+    var diameter: CGFloat
+    var lineWidth: CGFloat
+    /// Drawn inside the ring. Omitted in the compact form.
+    var label: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var spinnerAngle: Double = 0
 
-    private var window: UsageWindow? { status.headlineWindow }
-    private var fraction: Double? { window?.usedFraction }
-    private var percentage: Double? { window?.usedPercentage }
+    private var color: Color { Tokens.Palette.color(for: state) }
 
     var body: some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(Tokens.Palette.track, lineWidth: Tokens.Rail.ringLineWidth)
+        ZStack {
+            Circle()
+                .stroke(Tokens.Palette.track, lineWidth: lineWidth)
 
-                if let fraction {
-                    Circle()
-                        .trim(from: 0, to: max(fraction, 0.001))
-                        .stroke(
-                            Tokens.Palette.ring(forPercentage: percentage),
-                            style: StrokeStyle(lineWidth: Tokens.Rail.ringLineWidth, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))   // start the sweep at 12 o'clock
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: fraction)
-                } else if status.state == .loading {
-                    Circle()
-                        .trim(from: 0, to: 0.18)
-                        .stroke(
-                            Tokens.Palette.unavailable,
-                            style: StrokeStyle(lineWidth: Tokens.Rail.ringLineWidth, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                }
-
-                Image(systemName: status.provider.symbolName)
-                    .font(.system(size: Tokens.Rail.iconSize, weight: .medium))
-                    .foregroundStyle(
-                        fraction == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
-                    )
+            switch state {
+            case .loading:
+                loadingArc
+            case .unavailable:
+                // A dash rather than an empty ring: nothing measured is not zero used.
+                Rectangle()
+                    .fill(Tokens.Palette.inert)
+                    .frame(width: diameter * 0.3, height: max(lineWidth * 0.7, 1.5))
+                    .clipShape(Capsule())
+            default:
+                progressArc
             }
-            .frame(width: Tokens.Rail.ringDiameter, height: Tokens.Rail.ringDiameter)
-            .opacity(isStale ? 0.55 : 1)
 
-            if showPercentage {
-                Text(percentage.map { "\(Int($0.rounded()))%" } ?? "—")
-                    .font(Tokens.Type_.percentage)
-                    .foregroundStyle(
-                        fraction == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
-                    )
+            if let label, state.hasMeasurement {
+                Text(label)
+                    .font(Tokens.Type_.ringValue)
+                    .foregroundStyle(Tokens.Palette.primaryText)
                     .monospacedDigit()
             }
         }
-        .padding(.top, Tokens.Rail.ringTopInset)
-        .frame(width: Tokens.Rail.width, height: Tokens.Rail.itemHeight, alignment: .top)
-        .background {
-            if isFocused {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.07))
-                    .padding(.horizontal, 6)
-            }
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .frame(width: diameter, height: diameter)
     }
 
-    private var accessibilityLabel: String {
-        guard let percentage else {
-            return "\(status.displayName), \(status.statusMessage ?? "unavailable")"
-        }
-        var text = "\(status.displayName), \(Int(percentage.rounded())) percent used"
-        if let phrase = ResetCalculator.resetPhrase(to: window?.resetDate) { text += ", \(phrase)" }
-        if isStale { text += ", reading is stale" }
-        return text
+    private var progressArc: some View {
+        Circle()
+            // A hair of arc at 0%, so an untouched limit still reads as "measured" rather
+            // than looking like a missing reading.
+            .trim(from: 0, to: max(fraction ?? 0, 0.004))
+            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            .rotationEffect(.degrees(-90))   // start the sweep at twelve o'clock
+            .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.9), value: fraction)
+    }
+
+    private var loadingArc: some View {
+        Circle()
+            .trim(from: 0, to: 0.22)
+            .stroke(Tokens.Palette.inert, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            .rotationEffect(.degrees(spinnerAngle))
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                    spinnerAngle = 360
+                }
+            }
     }
 }

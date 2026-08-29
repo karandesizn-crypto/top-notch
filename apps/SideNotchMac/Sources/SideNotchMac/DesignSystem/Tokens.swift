@@ -1,144 +1,110 @@
 import SwiftUI
 import SideNotchCore
 
-/// Design tokens for the rail and detail card.
+/// Design tokens for the notch surface.
 ///
-/// Values are read off the reference concept: a black slab flush to the right screen edge,
-/// provider rings stacked vertically, and a detail card that flies out to the left.
+/// Sizes that depend on the hardware — the housing's width and height — are never tokens.
+/// They come from `NotchMetrics` at runtime, so the surface fits whatever display it is on.
 enum Tokens {
 
-    // MARK: Geometry
+    enum Surface {
+        /// Content width either side of the housing when collapsed.
+        static let collapsedFlank: CGFloat = 104
+        /// Content width either side of the housing when expanded.
+        static let expandedFlank: CGFloat = 150
 
-    enum Rail {
-        /// Width of the collapsed slab.
-        static let width: CGFloat = 74
-        /// Vertical space each provider occupies, ring plus percentage label.
-        static let itemHeight: CGFloat = 78
-        static let ringDiameter: CGFloat = 42
-        /// Distance from a slot's top to the ring's top. Pinning this rather than letting
-        /// the stack centre itself means the card's tail can be aimed arithmetically.
-        static let ringTopInset: CGFloat = 8
-        static let ringLineWidth: CGFloat = 3.5
-        static let iconSize: CGFloat = 17
-        /// Radius of the rounded left corners.
-        static let cornerRadius: CGFloat = 22
-        /// Radius of the concave fillets where the slab meets the screen edge.
-        static let flareRadius: CGFloat = 16
-        static let verticalPadding: CGFloat = 14
-        /// Gap below the menu bar.
-        static let topInset: CGFloat = 8
+        /// Width of the outward flare where the surface meets the top of the display.
+        static let flare: CGFloat = 14
+        /// Radius of the two bottom corners. Large, so the silhouette reads as one
+        /// continuous shape rather than a rounded rectangle.
+        static let bottomRadius: CGFloat = 22
+        static let expandedBottomRadius: CGFloat = 30
 
-        /// Height of the hosting panel: enough for the rail, and never less than a full
-        /// card needs.
-        static func panelHeight(itemCount: Int) -> CGFloat {
-            max(geometry(itemCount: itemCount).panelHeight, Tokens.Card.reservedHeight)
-        }
+        static let horizontalPadding: CGFloat = 14
+        static let bodyPadding: CGFloat = 18
 
-        /// Layout arithmetic for the rail, shared with the tests in SideNotchCore.
-        static func geometry(itemCount: Int) -> RailGeometry {
-            RailGeometry(
-                verticalPadding: verticalPadding,
-                itemHeight: itemHeight,
-                ringTopInset: ringTopInset,
-                ringDiameter: ringDiameter,
-                itemCount: itemCount
-            )
-        }
+        /// Minimum height, for displays with no housing to borrow a height from.
+        static let minimumRowHeight: CGFloat = 26
     }
 
-    enum Card {
-        static let width: CGFloat = 268
-        static let cornerRadius: CGFloat = 18
-        static let tailWidth: CGFloat = 11
-        static let tailHeight: CGFloat = 20
-        static let padding: CGFloat = 14
-        static let barHeight: CGFloat = 5
-        /// Gap between the card's tail and the rail.
-        static let railGap: CGFloat = 6
-        /// Vertical room reserved for a fully populated card. The panel is never shorter
-        /// than this, so a card beside a one-provider rail is not clipped.
-        static let reservedHeight: CGFloat = 320
+    enum Ring {
+        static let collapsedDiameter: CGFloat = 17
+        static let collapsedLineWidth: CGFloat = 2.5
+        static let expandedDiameter: CGFloat = 54
+        static let expandedLineWidth: CGFloat = 5
     }
-
-    // MARK: Color
 
     enum Palette {
-        static let surface = Color(white: 0.04)
-        static let cardSurface = Color(white: 0.07)
+        /// Near-black rather than pure black, so the surface separates from the housing by
+        /// a hair in bright rooms while still reading as one object.
+        static let surface = Color(red: 0.043, green: 0.043, blue: 0.047)
+        static let surfaceEdge = Color.white.opacity(0.07)
         static let primaryText = Color.white
-        static let secondaryText = Color(white: 0.62)
-        static let track = Color(white: 0.24)
-        static let unavailable = Color(white: 0.42)
+        static let secondaryText = Color(white: 0.60)
+        static let tertiaryText = Color(white: 0.42)
+        static let track = Color(white: 0.20)
 
-        static let good = Color(red: 0.20, green: 0.82, blue: 0.35)
-        static let moderate = Color(red: 0.98, green: 0.83, blue: 0.04)
-        static let high = Color(red: 0.98, green: 0.45, blue: 0.09)
-        static let severe = Color(red: 0.96, green: 0.26, blue: 0.21)
+        static let normal = Color(red: 0.20, green: 0.82, blue: 0.35)
+        static let warning = Color(red: 0.98, green: 0.79, blue: 0.10)
+        static let critical = Color(red: 0.99, green: 0.45, blue: 0.10)
+        static let exhausted = Color(red: 0.97, green: 0.27, blue: 0.24)
+        static let inert = Color(white: 0.38)
 
-        /// Ring colour as a continuous ramp over percentage used.
+        /// The single source of colour for usage state.
         ///
-        /// This is deliberately *not* `UsageHealth`. The health enum drives behaviour —
-        /// warnings, the one-shot pulse, notifications — on thresholds the user configures
-        /// (80/90 by default). The ring instead reads as a gradient so a glance conveys
-        /// roughly how much is left, which is what the reference concept does: 21% green,
-        /// 52% yellow, 73% orange. Keeping the two separate means retuning the visual ramp
-        /// never silently moves someone's alert thresholds.
-        static func ring(forPercentage percentage: Double?) -> Color {
-            guard let percentage else { return unavailable }
-            switch percentage {
-            case ..<35: return good
-            case ..<65: return moderate
-            case ..<88: return high
-            default: return severe
-            }
-        }
-
-        /// Semantic colour for badges and alert treatments.
-        ///
-        /// Driven by `UsageState`, which the user's thresholds control — distinct from the
-        /// ring ramp above, which is only how a percentage reads at a glance.
-        static func semantic(for state: UsageState) -> Color {
+        /// Driven entirely by `UsageState`, which `UsageStateEvaluator` derives from the
+        /// user's configured thresholds. There is deliberately no second colour ramp: two
+        /// systems would let the ring disagree with the alerts.
+        static func color(for state: UsageState) -> Color {
             switch state {
-            case .normal: good
-            case .warning: moderate
-            case .critical: high
-            case .exhausted: severe
-            case .unavailable, .loading: unavailable
+            case .normal: normal
+            case .warning: warning
+            case .critical: critical
+            case .exhausted: exhausted
+            case .unavailable, .loading: inert
             }
         }
     }
-
-    // MARK: Type
 
     enum Type_ {
-        static let percentage = Font.system(size: 13, weight: .semibold, design: .rounded)
-        static let cardTitle = Font.system(size: 13, weight: .semibold)
+        static let collapsedProvider = Font.system(size: 12, weight: .medium)
+        static let collapsedValue = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let title = Font.system(size: 15, weight: .semibold)
+        static let ringValue = Font.system(size: 15, weight: .semibold, design: .rounded)
         static let rowLabel = Font.system(size: 11, weight: .medium)
-        static let rowMeta = Font.system(size: 10, weight: .regular)
-        static let rowValue = Font.system(size: 11, weight: .semibold)
+        static let rowMeta = Font.system(size: 10.5, weight: .regular)
+        static let switcher = Font.system(size: 10, weight: .medium)
     }
 
-    // MARK: Motion
-
     enum Motion {
-        /// Respects Reduce Motion per MAC_UX.md's interaction principles.
-        static func expand(reduceMotion: Bool) -> Animation {
-            reduceMotion ? .linear(duration: 0.01) : .spring(response: 0.32, dampingFraction: 0.82)
+        /// One spring for the whole surface, so the shape, width, height, and content all
+        /// move together and read as a single object changing form.
+        ///
+        /// Damping is high on purpose: the brief calls for a system surface transforming,
+        /// not a bouncing widget.
+        static func surface(reduceMotion: Bool) -> Animation {
+            reduceMotion
+                ? .easeOut(duration: 0.12)
+                : .spring(response: 0.38, dampingFraction: 0.86)
+        }
+
+        static func content(reduceMotion: Bool) -> Animation {
+            reduceMotion
+                ? .easeOut(duration: 0.1)
+                : .spring(response: 0.30, dampingFraction: 0.90)
         }
     }
 }
 
 extension ProviderID {
-    /// SF Symbols stand in for provider marks.
-    ///
-    /// TECH_STACK.md allows custom provider marks "only where licensing/branding rules
-    /// allow", and shipping Anthropic/OpenAI/Cursor logos needs a trademark review first.
-    /// These are placeholders that keep the layout honest until that review happens.
+    /// SF Symbols stand in for provider marks: shipping the real Anthropic, OpenAI, and
+    /// Cursor logos needs a trademark review first.
     var symbolName: String {
         switch self {
         case .claude: "sparkle"
         case .codex: "circle.hexagongrid"
         case .cursor: "cursorarrow"
+        case .chatgpt: "bubble.left.and.bubble.right"
         }
     }
 }

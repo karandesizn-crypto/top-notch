@@ -7,7 +7,8 @@ import ProviderKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
     private var store: UsageStore!
-    private var controller: RailWindowController!
+    private var controller: NotchWindowController!
+    private var placement: DisplayPlacementService!
     private var notifications: NotificationService!
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
@@ -31,7 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: settings, cache: cache, notifications: notifications,
             providerOverride: providerOverride
         )
-        controller = RailWindowController(store: store, settings: settings)
+        placement = DisplayPlacementService()
+        controller = NotchWindowController(
+            store: store, settings: settings, placement: placement
+        )
+        controller.reconcileSelection()
 
         if handleDiagnosticModes() { return }
 
@@ -111,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func settingsDidChange() {
         applyAppearance()
         controller.applyAppearance()
-        controller.reposition()
+        controller.reconcileSelection()
+        controller.applyPlacement()
         settingsWindow?.appearance = settings.appearance.nsAppearance
         notifications.reset()
         Task { await store.refreshAll() }
@@ -134,7 +140,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await store.refreshAll()
                 let focused = environment["SIDENOTCH_RENDER_FOCUS"]
                     .flatMap(ProviderID.init(rawValue:))
-                PreviewRenderer.render(to: path, store: store, settings: settings, focused: focused)
+                PreviewRenderer.render(
+                    to: path, store: store, settings: settings,
+                    notch: placement.notch, selected: focused,
+                    expanded: environment["SIDENOTCH_RENDER_EXPANDED"] == "1"
+                )
                 NSApp.terminate(nil)
             }
             return true

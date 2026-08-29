@@ -8,6 +8,7 @@ let providers: [any UsageProvider] = [
     CodexUsageProvider(),
     ClaudeUsageProvider(),
     CursorUsageProvider(),
+    ChatGPTUsageProvider(),
 ]
 
 let staleness = StalenessPolicy.default
@@ -22,7 +23,7 @@ print("Codex installed: \(CodexInstallation.isInstalled)   signed in: \(CodexIns
 if let url = CodexInstallation.executableURL() { print("Executable:      \(url.path)") }
 print("")
 
-let columns = [("PROVIDER", 10), ("WINDOW", 18), ("USED", 8), ("RESETS", 22), ("STATE", 13)]
+let columns = [("PROVIDER", 10), ("WINDOW", 18), ("USED", 8), ("RESETS", 24), ("STATE", 13)]
 print(columns.map { pad($0.0, $0.1) }.joined())
 print(String(repeating: "─", count: columns.reduce(0) { $0 + $1.1 }))
 
@@ -38,7 +39,7 @@ for provider in providers {
                 pad(provider.displayName, 10)
                 + pad(window.label, 18)
                 + pad(window.usedPercentage.map { String(format: "%.0f%%", $0) } ?? "—", 8)
-                + pad(ResetCalculator.resetPhrase(to: window.resetDate, from: now) ?? "—", 22)
+                + pad(ResetCalculator.resetPhrase(to: window.resetDate, from: now) ?? "—", 24)
                 + pad(window.state.rawValue, 13)
             )
         }
@@ -54,7 +55,7 @@ for provider in providers {
         if !extras.isEmpty { print(pad("", 10) + "└─ " + extras.joined(separator: "  ·  ")) }
     } catch let error as ProviderError {
         print(pad(provider.displayName, 10) + pad("—", 18) + pad("—", 8)
-              + pad("—", 22) + "unavailable")
+              + pad("—", 24) + "unavailable")
         print(pad("", 10) + "└─ \(error.userFacingDescription)")
     } catch {
         print(pad(provider.displayName, 10) + "unexpected failure")

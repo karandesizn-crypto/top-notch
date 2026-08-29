@@ -48,8 +48,9 @@ final class UsageStore {
     /// Ticks so countdowns re-render without re-reading providers.
     private(set) var now: Date = Date()
 
-    /// Fixed rail order, so rings never reshuffle under the pointer.
-    let order: [ProviderID] = [.claude, .codex, .cursor]
+    /// Fixed presentation order, so the provider switcher never reshuffles under the
+    /// pointer as readings arrive.
+    let order: [ProviderID] = [.claude, .codex, .cursor, .chatgpt]
 
     let staleness = StalenessPolicy.default
 
@@ -100,6 +101,7 @@ final class UsageStore {
             ClaudeUsageProvider(),
             CodexUsageProvider(thresholds: settings.thresholds) { await trigger.fire() },
             CursorUsageProvider(),
+            ChatGPTUsageProvider(),
         ]
     }
 

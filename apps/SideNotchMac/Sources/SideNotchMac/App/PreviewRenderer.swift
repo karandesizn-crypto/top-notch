@@ -2,29 +2,53 @@ import SwiftUI
 import AppKit
 import SideNotchCore
 
-/// Renders the rail offscreen to a PNG.
+/// Renders the notch surface offscreen to a PNG.
 ///
-/// Checking the live panel needs screen-recording permission and a person at the keyboard;
-/// `ImageRenderer` needs neither, so the interface stays verifiable from a build script.
+/// Checking the live window needs screen-recording permission and a person at the keyboard;
+/// `ImageRenderer` needs neither, so the surface stays verifiable from a build script.
+/// The backdrop imitates the top of a display — a wallpaper strip with the physical camera
+/// housing drawn in — because the silhouette only makes sense against what it merges into.
 @MainActor
 enum PreviewRenderer {
     static func render(
-        to path: String, store: UsageStore, settings: AppSettings, focused: ProviderID?
+        to path: String,
+        store: UsageStore,
+        settings: AppSettings,
+        notch: NotchMetrics,
+        selected: ProviderID?,
+        expanded: Bool
     ) {
-        let size = RailWindowController.panelSize(providerCount: store.visibleProviders.count)
-        let content = ZStack {
-            // Stands in for a wallpaper, so the black slab and its concave fillets show.
+        let layout = SurfaceSizing.layout(for: notch)
+
+        let state = NotchSurfaceState()
+        state.isExpanded = expanded
+        state.isPinned = expanded
+        if let selected { state.selected = selected }
+
+        let canvasWidth: CGFloat = 900
+        let canvasHeight = layout.maximumExpandedSize.height + 90
+
+        let content = ZStack(alignment: .top) {
             LinearGradient(
                 colors: [
-                    Color(red: 0.36, green: 0.72, blue: 0.86),
-                    Color(red: 0.85, green: 0.86, blue: 0.62),
-                    Color(red: 0.90, green: 0.42, blue: 0.24),
+                    Color(red: 0.10, green: 0.30, blue: 0.46),
+                    Color(red: 0.36, green: 0.20, blue: 0.42),
+                    Color(red: 0.62, green: 0.28, blue: 0.24),
                 ],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
-            RailView(store: store, settings: settings, focused: .constant(focused))
+
+            // The physical housing: opaque hardware the surface has to reserve room for.
+            if notch.hasPhysicalNotch {
+                Rectangle()
+                    .fill(.black)
+                    .frame(width: notch.notchWidth, height: notch.notchHeight)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
+            NotchRootView(store: store, settings: settings, surface: state, layout: layout)
         }
-        .frame(width: size.width, height: size.height)
+        .frame(width: canvasWidth, height: canvasHeight)
         .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: content)

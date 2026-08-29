@@ -147,141 +147,203 @@ struct StalenessPolicyTests {
     }
 }
 
-@Suite("Rail geometry")
-struct RailGeometryTests {
-    let geometry = RailGeometry(
-        verticalPadding: 14, itemHeight: 78, ringTopInset: 8, ringDiameter: 42, itemCount: 3
+@Suite("Notch placement")
+struct NotchPlacementTests {
+    /// A 14" MacBook Pro, measured from AppKit rather than assumed: 1512x982 with a 32pt
+    /// safe area and 663.5pt auxiliary areas either side of a 185pt housing.
+    static let notchedDisplay = DisplayMetrics(
+        frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 949),
+        safeAreaTop: 32,
+        auxiliaryTopLeftWidth: 663.5,
+        auxiliaryTopRightWidth: 663.5,
+        menuBarHeight: 22,
+        backingScaleFactor: 2
     )
 
-    @Test("panel height covers every slot plus padding")
-    func panelHeight() {
-        // 14pt padding top and bottom, three 78pt slots.
-        #expect(geometry.panelHeight == 262)
+    /// An external monitor: no housing, no safe area.
+    static let externalDisplay = DisplayMetrics(
+        frame: CGRect(x: -2560, y: 0, width: 2560, height: 1440),
+        visibleFrame: CGRect(x: -2560, y: 0, width: 2560, height: 1415),
+        safeAreaTop: 0,
+        auxiliaryTopLeftWidth: nil,
+        auxiliaryTopRightWidth: nil,
+        menuBarHeight: 22,
+        backingScaleFactor: 1
+    )
+
+    @Test("a physical notch is measured, not assumed")
+    func notchedMetrics() {
+        let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
+        #expect(metrics.hasPhysicalNotch)
+        #expect(metrics.notchWidth == 185)
+        #expect(metrics.notchHeight == 32)          // safe area, not the 22pt menu bar
+        #expect(metrics.centerX == 756)
+        #expect(metrics.notchMinX == 663.5)
+        #expect(metrics.notchMaxX == 848.5)
+        #expect(metrics.anchorTopY == 982)          // merges with the very top of the display
     }
 
-    static let ringCases: [(Int, CGFloat)] = [(0, 43), (1, 121), (2, 199)]
-
-    @Test("ring centres step by one slot height", arguments: RailGeometryTests.ringCases)
-    func ringCentres(index: Int, expected: CGFloat) {
-        #expect(geometry.ringCenterY(index: index) == expected)
+    @Test("a display without a housing falls back to the menu bar")
+    func nonNotchedMetrics() {
+        let metrics = NotchPlacement.metrics(for: Self.externalDisplay)
+        #expect(metrics.hasPhysicalNotch == false)
+        #expect(metrics.notchWidth == 0)
+        #expect(metrics.notchHeight == 22)
+        #expect(metrics.centerX == -1280)           // that display's own centre
+        // Hangs below the menu bar rather than covering menu items across the centre.
+        #expect(metrics.anchorTopY == 1415)
     }
 
-    @Test("a tall card centres on its ring")
-    func tallCardCentres() {
-        #expect(geometry.cardOffset(index: 1, cardHeight: 120) == 61)
-        #expect(geometry.tailCenterY(index: 1, cardHeight: 120) == 60)
+    @Test("the surface centres on the housing and hangs from the top of the display")
+    func surfaceOnNotchedDisplay() {
+        let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
+        let frame = NotchPlacement.surfaceFrame(
+            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.notchedDisplay
+        )
+        #expect(frame.midX == 756)                  // centred on the housing
+        #expect(frame.maxY == 982)                  // flush with the top of the display
+        #expect(frame.height == 38)
     }
 
-    @Test("a card taller than its ring offset clamps to the panel top")
-    func clampsToTop() {
-        #expect(geometry.cardOffset(index: 0, cardHeight: 150) == 0)
-        #expect(geometry.tailCenterY(index: 0, cardHeight: 150) == 43)
+    @Test("expanding grows downward and keeps the top edge pinned")
+    func expansionGrowsDownward() {
+        let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
+        let collapsed = NotchPlacement.surfaceFrame(
+            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.notchedDisplay
+        )
+        let expanded = NotchPlacement.surfaceFrame(
+            size: CGSize(width: 520, height: 260), metrics: metrics, display: Self.notchedDisplay
+        )
+        #expect(collapsed.maxY == expanded.maxY)    // the anchor never moves
+        #expect(expanded.minY < collapsed.minY)     // it grows down
+        #expect(collapsed.midX == expanded.midX)    // and stays centred
     }
 
-    @Test("a card near the bottom stays inside the panel with its tail on the ring")
-    func clampsToBottom() {
-        let height: CGFloat = 100
-        let offset = geometry.cardOffset(index: 2, cardHeight: height)
-        #expect(offset + height <= geometry.panelHeight)
-        let tail = geometry.tailCenterY(index: 2, cardHeight: height)
-        #expect(tail >= 0 && tail <= height)
+    @Test("an external display keeps its own coordinate space")
+    func surfaceOnExternalDisplay() {
+        let metrics = NotchPlacement.metrics(for: Self.externalDisplay)
+        let frame = NotchPlacement.surfaceFrame(
+            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.externalDisplay
+        )
+        #expect(frame.midX == -1280)
+        #expect(frame.maxY == 1415)                 // below that display's menu bar
+        #expect(frame.minX < 0)                     // negative origin is preserved
     }
 
-    @Test("zero card height is inert rather than producing a negative offset")
-    func zeroHeight() {
-        #expect(geometry.cardOffset(index: 2, cardHeight: 0) == 0)
+    @Test("a surface wider than the display is clamped on screen")
+    func clampsOversizedSurface() {
+        let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
+        let frame = NotchPlacement.surfaceFrame(
+            size: CGSize(width: 4000, height: 60), metrics: metrics, display: Self.notchedDisplay
+        )
+        #expect(frame.minX == 0)
+    }
+
+    @Test("a display reporting only one auxiliary area is treated as un-notched")
+    func partialAuxiliaryAreas() {
+        // Defensive: mixed reporting during a display reconfiguration must not produce a
+        // negative notch width.
+        let display = DisplayMetrics(
+            frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 949),
+            safeAreaTop: 32, auxiliaryTopLeftWidth: 663.5, auxiliaryTopRightWidth: nil,
+            menuBarHeight: 22, backingScaleFactor: 2
+        )
+        let metrics = NotchPlacement.metrics(for: display)
+        #expect(metrics.hasPhysicalNotch == false)
+        #expect(metrics.notchWidth == 0)
+    }
+
+    @Test("lengths align to whole pixels at the display's scale")
+    func pixelAlignment() {
+        #expect(NotchPlacement.pixelAligned(10.3, scale: 2) == 10.5)
+        #expect(NotchPlacement.pixelAligned(10.3, scale: 1) == 10)
+        #expect(NotchPlacement.pixelAligned(10.26, scale: 3).isFinite)
     }
 }
 
-@Suite("Rail placement")
-struct RailPlacementTests {
-    let panel = CGSize(width: 348, height: 262)
-
-    @Test("the rail hugs the right edge, below the menu bar")
-    func builtInDisplay() {
-        // A 1512x982 built-in display with a 37pt menu bar.
-        let frame = RailPlacement.frame(
-            screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
-            visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 945),
-            panelSize: panel, topInset: 8
-        )
-        #expect(frame.maxX == 1512)             // flush right
-        #expect(frame.maxY == 937)              // 8pt below the menu bar
-        #expect(frame.size == panel)
-    }
-
-    @Test("an external display to the left keeps its own coordinates")
-    func negativeOriginDisplay() {
-        // Secondary monitors sit at negative origins when placed left of the built-in.
-        let frame = RailPlacement.frame(
-            screenFrame: CGRect(x: -2560, y: 0, width: 2560, height: 1440),
-            visibleFrame: CGRect(x: -2560, y: 0, width: 2560, height: 1415),
-            panelSize: panel, topInset: 8
-        )
-        #expect(frame.maxX == 0)                // right edge of that display
-        #expect(frame.minX == -348)
-        #expect(frame.maxY == 1407)
-    }
-
-    @Test("a Dock at the bottom does not move the rail, which anchors to the top")
-    func dockDoesNotMatter() {
-        let withoutDock = RailPlacement.frame(
-            screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
-            visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 945),
-            panelSize: panel, topInset: 8
-        )
-        let withDock = RailPlacement.frame(
-            screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
-            visibleFrame: CGRect(x: 0, y: 80, width: 1512, height: 865),
-            panelSize: panel, topInset: 8
-        )
-        #expect(withoutDock == withDock)
-    }
-
-    @Test("a display shorter than the rail keeps the top of the rail on screen")
-    func veryShortDisplay() {
-        let frame = RailPlacement.frame(
-            screenFrame: CGRect(x: 0, y: 0, width: 800, height: 200),
-            visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 180),
-            panelSize: panel, topInset: 8
-        )
-        #expect(frame.minY >= 0)
-    }
-
-    @Test("notch detection keys off the safe area")
-    func notchDetection() {
-        #expect(RailPlacement.hasNotch(safeAreaTopInset: 32) == true)
-        #expect(RailPlacement.hasNotch(safeAreaTopInset: 0) == false)
-    }
-}
-
-@Suite("Card clamping in a taller panel")
-struct CardContainerTests {
-    // One provider: a short rail inside a panel kept tall enough for a full card.
-    let geometry = RailGeometry(
-        verticalPadding: 14, itemHeight: 78, ringTopInset: 8, ringDiameter: 42, itemCount: 1
+@Suite("Notch surface layout")
+struct NotchSurfaceLayoutTests {
+    /// Built from the measured 185x32 housing.
+    let notched = NotchSurfaceLayout(
+        notchWidth: 185, notchHeight: 32, flare: 14,
+        collapsedFlank: 104, expandedFlank: 150, minimumRowHeight: 26
     )
 
-    @Test("a card taller than the rail is not clipped to the rail's height")
-    func cardTallerThanRail() {
-        #expect(geometry.panelHeight == 106)
-        let cardHeight: CGFloat = 220
+    /// No housing: both flanks meet in the middle.
+    let flat = NotchSurfaceLayout(
+        notchWidth: 0, notchHeight: 22, flare: 14,
+        collapsedFlank: 104, expandedFlank: 150, minimumRowHeight: 26
+    )
 
-        // Clamped to the rail, the card would be forced to offset 0 and overflow.
-        let clampedToRail = geometry.cardOffset(index: 0, cardHeight: cardHeight)
-        #expect(clampedToRail + cardHeight > geometry.panelHeight)
-
-        // Clamped to the panel, it fits.
-        let clampedToPanel = geometry.cardOffset(
-            index: 0, cardHeight: cardHeight, containerHeight: 320
-        )
-        #expect(clampedToPanel + cardHeight <= 320)
+    @Test("the collapsed surface straddles the housing")
+    func collapsedSize() {
+        #expect(notched.collapsedSize.width == 421)    // 185 + 104*2 + 14*2
+        #expect(notched.collapsedSize.height == 32)    // the housing's own height
     }
 
-    @Test("the tail still lands on the ring inside the taller panel")
-    func tailStillOnRing() {
-        let tail = geometry.tailCenterY(index: 0, cardHeight: 220, containerHeight: 320)
-        #expect(tail == geometry.ringCenterY(index: 0))   // card sits at offset 0
-        #expect(tail >= 0 && tail <= 220)
+    @Test("expanding grows in both directions")
+    func expandedSize() {
+        let expanded = notched.expandedSize(rowCount: 2, hasSwitcher: true)
+        #expect(expanded.width == 513)                 // 185 + 150*2 + 14*2
+        #expect(expanded.width > notched.collapsedSize.width)
+        #expect(expanded.height > notched.collapsedSize.height)
+    }
+
+    @Test("the body follows its content instead of leaving a void")
+    func bodyHeightFollowsContent() {
+        // One window and no switcher is the common Codex case; it must not reserve the
+        // room a two-window provider with a switcher needs.
+        let single = notched.expandedBodyHeight(rowCount: 1, hasSwitcher: false)
+        let double = notched.expandedBodyHeight(rowCount: 2, hasSwitcher: false)
+        let doubleWithSwitcher = notched.expandedBodyHeight(rowCount: 2, hasSwitcher: true)
+
+        #expect(single < double)
+        #expect(double < doubleWithSwitcher)
+        #expect(doubleWithSwitcher - double == notched.switcherHeight)
+    }
+
+    @Test("the body never shrinks below the usage ring")
+    func minimumBodyHeight() {
+        #expect(notched.expandedBodyHeight(rowCount: 0, hasSwitcher: false) >= notched.minimumBodyHeight)
+        #expect(notched.expandedBodyHeight(rowCount: 1, hasSwitcher: false) >= notched.minimumBodyHeight)
+    }
+
+    @Test("a display with no housing still gets a usable row")
+    func flatDisplayRow() {
+        // A 22pt menu bar is below the floor, so the row uses the minimum instead.
+        #expect(flat.rowHeight == 26)
+        #expect(flat.collapsedSize.width == 236)       // 0 + 104*2 + 14*2
+        #expect(flat.collapsedSize.height == 26)
+    }
+
+    @Test("the window is sized for the busiest state, so switching never resizes it")
+    func windowSize() {
+        #expect(notched.windowSize == notched.maximumExpandedSize)
+        // Every reachable state fits inside the window.
+        for rows in 0...NotchSurfaceLayout.maximumRows {
+            for switcher in [true, false] {
+                let size = notched.expandedSize(rowCount: rows, hasSwitcher: switcher)
+                #expect(size.height <= notched.windowSize.height)
+                #expect(size.width <= notched.windowSize.width)
+            }
+        }
+    }
+
+    @Test("flank width follows the state")
+    func flankWidth() {
+        #expect(notched.flankWidth(expanded: false) == 104)
+        #expect(notched.flankWidth(expanded: true) == 150)
+    }
+
+    @Test("layout can be built straight from measured notch metrics")
+    func fromMetrics() {
+        let metrics = NotchPlacement.metrics(for: NotchPlacementTests.notchedDisplay)
+        let layout = NotchSurfaceLayout(
+            notch: metrics, flare: 14, collapsedFlank: 104,
+            expandedFlank: 150, minimumRowHeight: 26
+        )
+        #expect(layout == notched)
     }
 }
