@@ -10,7 +10,7 @@ import UsageKit
 @MainActor
 final class NotchWindowController {
     private let window: NotchWindow
-    private let store: UsageManager
+    private let manager: UsageManager
     private let settings: AppSettings
     private let placement: DisplayPlacementService
     private let surface = NotchSurfaceState()
@@ -26,12 +26,12 @@ final class NotchWindowController {
     /// Extra margin around the drawn surface for hit testing.
     private static let hitSlop: CGFloat = 7
 
-    init(store: UsageManager, settings: AppSettings, placement: DisplayPlacementService) {
-        self.store = store
+    init(manager: UsageManager, settings: AppSettings, placement: DisplayPlacementService) {
+        self.manager = manager
         self.settings = settings
         self.placement = placement
 
-        let layout = Self.layout(store: store, settings: settings, placement: placement)
+        let layout = Self.layout(manager: manager, settings: settings, placement: placement)
         window = NotchWindow(contentRect: NSRect(origin: .zero, size: layout.windowSize))
 
         let container = PassthroughContentView(
@@ -41,7 +41,7 @@ final class NotchWindowController {
 
         let hosting = NSHostingView(
             rootView: NotchHost(
-                store: store, settings: settings, surface: surface, layout: layout,
+                manager: manager, settings: settings, surface: surface, layout: layout,
                 onAddProvider: { }
             )
         )
@@ -123,7 +123,7 @@ final class NotchWindowController {
         window.setFrame(frame, display: true)
         window.orderFrontRegardless()
         hosting?.rootView = NotchHost(
-            store: store, settings: settings, surface: surface, layout: layout,
+            manager: manager, settings: settings, surface: surface, layout: layout,
             onAddProvider: { [weak self] in self?.onAddProvider?() }
         )
     }
@@ -135,7 +135,7 @@ final class NotchWindowController {
 
     /// Ensures the selected provider is one that is actually visible.
     func reconcileSelection() {
-        let visible = store.visibleProviders
+        let visible = manager.visibleProviders
         guard !visible.isEmpty else { return }
         if !visible.contains(surface.selected) {
             surface.selected = visible.first!
@@ -166,10 +166,10 @@ final class NotchWindowController {
     ///
     /// Static so the initializer can call it before `self` exists.
     private static func layout(
-        store: UsageManager, settings: AppSettings, placement: DisplayPlacementService
+        manager: UsageManager, settings: AppSettings, placement: DisplayPlacementService
     ) -> NotchSurfaceLayout {
         SurfaceSizing.layout(
-            providerCount: store.visibleProviders.count,
+            providerCount: manager.visibleProviders.count,
             notch: placement.notch,
             showsFigures: settings.showPercentages,
             showsAddButton: settings.canAddProvider
@@ -177,7 +177,7 @@ final class NotchWindowController {
     }
 
     private func currentLayout() -> NotchSurfaceLayout {
-        Self.layout(store: store, settings: settings, placement: placement)
+        Self.layout(manager: manager, settings: settings, placement: placement)
     }
 
     /// Placement summary, for verifying multi-display behaviour without a screenshot.
@@ -192,7 +192,7 @@ final class NotchWindowController {
         lines.append("surface shown  \(placement.hasSuitableDisplay ? "yes" : "no")")
         lines.append("housing        \(notch.notchWidth)x\(notch.notchHeight) centred at x=\(notch.centerX)")
         lines.append("anchor top y   \(notch.anchorTopY)")
-        lines.append("providers      \(store.visibleProviders.count)")
+        lines.append("providers      \(manager.visibleProviders.count)")
         lines.append("collapsed      \(Int(layout.collapsedSize.width))x\(Int(layout.collapsedSize.height))")
         lines.append("expanded max   \(Int(layout.expandedSize(pinned: true).width))x\(Int(layout.expandedSize(pinned: true).height))")
         lines.append("window         \(Int(window.frame.width))x\(Int(window.frame.height)) at (\(Int(window.frame.minX)), \(Int(window.frame.minY)))")
@@ -203,7 +203,7 @@ final class NotchWindowController {
 
 /// Bridges the observable state into SwiftUI.
 struct NotchHost: View {
-    let store: UsageManager
+    let manager: UsageManager
     let settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout
@@ -211,7 +211,7 @@ struct NotchHost: View {
 
     var body: some View {
         NotchRootView(
-            store: store, settings: settings, surface: surface,
+            manager: manager, settings: settings, surface: surface,
             layout: layout, onAddProvider: onAddProvider
         )
     }

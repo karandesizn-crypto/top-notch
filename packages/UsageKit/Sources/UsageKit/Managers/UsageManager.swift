@@ -78,6 +78,9 @@ public struct ProviderStatus: Identifiable, Sendable {
 public final class UsageManager {
     public private(set) var statuses: [ProviderType: ProviderStatus] = [:]
     public private(set) var lastRefresh: Date?
+    /// Why the last whole refresh ran. Observable so the UI could surface it, and useful
+    /// in logs when diagnosing an unexpected read.
+    public private(set) var lastTrigger: RefreshTrigger?
     /// Ticks so countdowns re-render without re-reading providers.
     public private(set) var now: Date = Date()
 
@@ -104,7 +107,7 @@ public final class UsageManager {
     private var providers: [ProviderType: any UsageProvider] = [:]
     private let registry: ProviderRegistry
     private var inFlight: Set<ProviderType> = []
-    private let refreshTrigger = RefreshTrigger()
+    private let providerEvents = ProviderEventRelay()
     private var scheduler: RefreshScheduler?
 
     public init(
@@ -121,14 +124,16 @@ public final class UsageManager {
         self.notifications = notifications
         self.registry = registry
 
-        let built = providerOverride ?? Self.makeProviders(settings: settings, trigger: refreshTrigger)
+        let built = providerOverride ?? Self.makeProviders(settings: settings, registry: registry, relay: providerEvents)
         for provider in built { providers[provider.providerType] = provider }
         order = built.map(\.providerType)
 
         // Codex pushes `account/rateLimits/updated`; route it into a refresh so usage
         // changes appear without waiting out the interval. The trigger box exists because
         // providers are built before `self` is available.
-        refreshTrigger.handler = { [weak self] in await self?.refresh(.codex) }
+        providerEvents.handler = { [weak self] in
+            await self?.refresh(.codex, trigger: .providerEvent)
+        }
 
         // Restored readings arrive already marked `.cached`.
         let cached = cache.load()
@@ -143,21 +148,24 @@ public final class UsageManager {
         }
     }
 
-    /// Built-ins in shipped order, then one `CustomUsageProvider` per user-added tool.
+    /// Built-ins in shipped order, then one adapter per user-added tool.
+    ///
+    /// Every adapter comes from the registry, so the manager never names a concrete
+    /// provider type and adding an integration does not touch this file.
     private static func makeProviders(
-        settings: AppSettings, trigger: RefreshTrigger
+        settings: AppSettings, registry: ProviderRegistry, relay: ProviderEventRelay
     ) -> [any UsageProvider] {
-        var providers: [any UsageProvider] = [
-            ClaudeUsageProvider(),
-            CodexUsageProvider(thresholds: settings.thresholds) { await trigger.fire() },
-            CursorUsageProvider(),
-        ]
-        for definition in settings.customProviders {
-            providers.append(
-                CustomUsageProvider(providerType: definition.providerType, displayName: definition.name)
+        let types = ProviderType.builtIn + settings.customProviders.map(\.providerType)
+        return types.map { type in
+            registry.make(
+                ProviderRegistry.Context(
+                    providerType: type,
+                    displayName: settings.displayName(for: type),
+                    thresholds: settings.thresholds,
+                    onProviderEvent: { await relay.fire() }
+                )
             )
         }
-        return providers
     }
 
     // MARK: Lifecycle
@@ -169,7 +177,7 @@ public final class UsageManager {
         let scheduler = RefreshScheduler(
             interval: { [weak self] in self?.settings.refreshInterval ?? 300 },
             tick: { [weak self] in self?.now = Date() },
-            perform: { [weak self] _ in await self?.refreshAll() }
+            perform: { [weak self] trigger in await self?.refreshAll(trigger: trigger) }
         )
         self.scheduler = scheduler
         scheduler.start()
@@ -188,7 +196,7 @@ public final class UsageManager {
         for provider in providers.values where !ProviderType.builtIn.contains(provider.providerType) {
             await provider.stopMonitoring()
         }
-        let rebuilt = Self.makeProviders(settings: settings, trigger: refreshTrigger)
+        let rebuilt = Self.makeProviders(settings: settings, registry: registry, relay: providerEvents)
         var next: [ProviderType: any UsageProvider] = [:]
         for provider in rebuilt {
             // Built-in adapters are reused, so the Codex app-server connection survives a
@@ -211,12 +219,13 @@ public final class UsageManager {
 
     // MARK: Refreshing
 
-    public func refreshAll() async {
+    public func refreshAll(trigger: RefreshTrigger = .manual) async {
         await withTaskGroup(of: Void.self) { group in
             for id in order where settings.isEnabled(id) {
-                group.addTask { [weak self] in await self?.refresh(id) }
+                group.addTask { [weak self] in await self?.refresh(id, trigger: trigger) }
             }
         }
+        lastTrigger = trigger
         now = Date()
         lastRefresh = now
     }
@@ -230,14 +239,20 @@ public final class UsageManager {
             for (index, id) in visibleProviders.enumerated() {
                 group.addTask { [weak self] in
                     try? await Task.sleep(for: step * index)
-                    await self?.refresh(id)
+                    await self?.refresh(id, trigger: .manual)
                 }
             }
         }
     }
 
     /// Refreshes one provider. Safe to call concurrently; duplicates are dropped.
-    public func refresh(_ id: ProviderType) async {
+    ///
+    /// Single-provider reads guard themselves rather than going through the scheduler.
+    /// The scheduler coalesces *whole* refreshes; routing a Codex push through it would
+    /// re-read Claude and Cursor as well, for an event that says nothing about them.
+    public func refresh(
+        _ id: ProviderType, trigger: RefreshTrigger = .manual
+    ) async {
         guard let provider = providers[id], !inFlight.contains(id) else { return }
         inFlight.insert(id)
         statuses[id]?.isRefreshing = true
@@ -253,7 +268,7 @@ public final class UsageManager {
         } catch let error as ProviderError {
             result = Self.state(for: error, provider: id)
             Log.provider.notice(
-                "\(id.rawValue, privacy: .public) \(error.status.rawValue, privacy: .public)"
+                "\(id.rawValue, privacy: .public) \(error.status.rawValue, privacy: .public) via \(trigger.rawValue, privacy: .public)"
             )
         } catch {
             result = UsageState.failed(provider: id, reason: "Unexpected failure")
@@ -315,12 +330,12 @@ public final class UsageManager {
     }
 }
 
-/// Lets a provider signal "refresh me" before the manager that handles it exists.
+/// Lets a provider signal "my figures changed" before the manager that handles it exists.
 ///
 /// Providers are constructed inside the manager's initializer, so they cannot capture
 /// `self`. A push arriving in that window is dropped, which is correct — the launch
 /// refresh is moments away.
-public final class RefreshTrigger: @unchecked Sendable {
+public final class ProviderEventRelay: @unchecked Sendable {
     private let lock = NSLock()
     private var _handler: (@Sendable () async -> Void)?
 

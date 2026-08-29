@@ -6,7 +6,7 @@ import UsageKit
 /// The settings window.
 struct SettingsView: View {
     @Bindable var settings: AppSettings
-    let store: UsageManager
+    let manager: UsageManager
     let onSettingsChanged: () -> Void
     let onProvidersChanged: () -> Void
 
@@ -83,7 +83,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func providerRow(_ provider: ProviderType) -> some View {
-        let status = store.status(for: provider)
+        let status = manager.status(for: provider)
         Toggle(isOn: Binding(
             get: { settings.isEnabled(provider) },
             set: { settings.setEnabled($0, for: provider); onSettingsChanged() }

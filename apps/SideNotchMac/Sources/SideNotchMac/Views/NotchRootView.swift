@@ -26,7 +26,7 @@ final class NotchSurfaceState {
 /// larger row. Nothing moves on expand; content is only revealed beneath, which is what
 /// makes it read as one surface changing shape.
 struct NotchRootView: View {
-    @Bindable var store: UsageManager
+    @Bindable var manager: UsageManager
     @Bindable var settings: AppSettings
     @Bindable var surface: NotchSurfaceState
     let layout: NotchSurfaceLayout
@@ -47,8 +47,8 @@ struct NotchRootView: View {
     @State private var hoverSweepTask: Task<Void, Never>?
 
     private var expanded: Bool { surface.isExpanded }
-    private var providers: [ProviderType] { store.visibleProviders }
-    private var status: ProviderStatus? { store.status(for: surface.selected) }
+    private var providers: [ProviderType] { manager.visibleProviders }
+    private var status: ProviderStatus? { manager.status(for: surface.selected) }
 
     private var minimized: Bool { surface.isMinimized }
 
@@ -203,7 +203,7 @@ struct NotchRootView: View {
     }
 
     private func chip(_ provider: ProviderType) -> some View {
-        let providerStatus = store.status(for: provider)
+        let providerStatus = manager.status(for: provider)
         let isSelected = expanded && provider == surface.selected
 
         return Button {
@@ -344,11 +344,11 @@ struct NotchRootView: View {
         var parts = ["\(Int(percentage.rounded()))% used"]
         if settings.showResetCountdown,
            let phrase = ResetCalculator.compactResetPhrase(
-               to: window.resetDate, from: store.now
+               to: window.resetDate, from: manager.now
            ) {
             parts.append(phrase)
         }
-        if store.isStale(surface.selected) { parts.append("stale") }
+        if manager.isStale(surface.selected) { parts.append("stale") }
         return parts.joined(separator: " · ")
     }
 
@@ -385,7 +385,7 @@ struct NotchRootView: View {
             surface.isPinned = true
             surface.isMinimized = false
         }
-        Task { await store.refreshAllStaggered() }
+        Task { await manager.refreshAllStaggered() }
     }
 
     // MARK: Accessibility
@@ -403,11 +403,11 @@ struct NotchRootView: View {
         }
 
         if let phrase = ResetCalculator.resetPhrase(
-            to: status.headlineWindow?.resetDate, from: store.now
+            to: status.headlineWindow?.resetDate, from: manager.now
         ) {
             parts.append(phrase.replacingOccurrences(of: "Resets", with: "resets"))
         }
-        if store.isStale(status.provider) { parts.append("reading is stale") }
+        if manager.isStale(status.provider) { parts.append("reading is stale") }
 
         return parts.joined(separator: ", ")
     }

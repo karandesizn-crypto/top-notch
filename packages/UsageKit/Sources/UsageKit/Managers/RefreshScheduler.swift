@@ -1,6 +1,24 @@
 import Foundation
 import ProviderKit
 
+/// Why a refresh is happening.
+///
+/// Declared at file scope rather than nested in the scheduler: a type nested inside a
+/// `@MainActor` class inherits that isolation, which stops it crossing a task boundary —
+/// exactly what a trigger has to do to reach a concurrent read.
+public enum RefreshTrigger: String, Sendable, CaseIterable {
+    /// The app just started.
+    case launch
+    /// The user asked, via the menu bar or by clicking a provider.
+    case manual
+    /// The surface was opened.
+    case expansion
+    /// The periodic schedule came round.
+    case periodic
+    /// A provider told us its figures changed.
+    case providerEvent
+}
+
 /// Decides *when* usage is re-read. It knows nothing about how.
 ///
 /// Extracted from the manager so the timing policy can be reasoned about — and later
@@ -8,20 +26,10 @@ import ProviderKit
 /// calls back; whoever owns the providers does the fetching.
 @MainActor
 public final class RefreshScheduler {
-    /// Why a refresh is happening. Recorded so the manager can treat a user-initiated
-    /// refresh differently from a background one if it ever needs to.
-    public enum Trigger: String {
-        case launch
-        case manual
-        case expansion
-        case periodic
-        case providerEvent
-    }
-
     /// How long between periodic refreshes, read fresh each cycle so a settings change
     /// takes effect without restarting the loop.
     private let interval: @MainActor () -> TimeInterval
-    private let perform: @MainActor (Trigger) async -> Void
+    private let perform: @MainActor (RefreshTrigger) async -> Void
     /// Fires periodically so countdown text re-renders without re-reading providers.
     private let tick: @MainActor () -> Void
 
@@ -34,7 +42,7 @@ public final class RefreshScheduler {
     public init(
         interval: @escaping @MainActor () -> TimeInterval,
         tick: @escaping @MainActor () -> Void,
-        perform: @escaping @MainActor (Trigger) async -> Void
+        perform: @escaping @MainActor (RefreshTrigger) async -> Void
     ) {
         self.interval = interval
         self.tick = tick
@@ -73,7 +81,7 @@ public final class RefreshScheduler {
     ///
     /// Coalescing here rather than in the manager means every trigger — launch, a click,
     /// a provider event — gets the same protection without each remembering to ask.
-    public func request(_ trigger: Trigger) async {
+    public func request(_ trigger: RefreshTrigger) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }

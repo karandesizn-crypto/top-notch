@@ -7,7 +7,7 @@ import UsageKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
-    private var store: UsageManager!
+    private var manager: UsageManager!
     private var controller: NotchWindowController!
     private var placement: DisplayPlacementService!
     private var notifications: NotificationService!
@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let providerOverride: [any UsageProvider]? =
             usingMocks ? MockUsageProvider.showcase() : nil
 
-        store = UsageManager(
+        manager = UsageManager(
             settings: settings, cache: cache, notifications: notifications,
             providerOverride: providerOverride
         )
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.settings.showsWithoutNotch ?? false
         }
         controller = NotchWindowController(
-            store: store, settings: settings, placement: placement
+            manager: manager, settings: settings, placement: placement
         )
         controller.reconcileSelection()
         controller.onAddProvider = { [weak self] in self?.openSettings() }
@@ -53,14 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await notifications.requestAuthorization()
-            await store.start()
+            await manager.start()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         // Terminating the app-server child process matters: it outlives us otherwise.
-        let store = self.store
-        Task { await store?.stop() }
+        let manager = self.manager
+        Task { await manager?.stop() }
     }
 
     // MARK: Status item
@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func refreshNow() {
-        Task { await store.refreshAll() }
+        Task { await manager.refreshAll() }
     }
 
     @objc private func quit() {
@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let view = SettingsView(
             settings: settings,
-            store: store,
+            manager: manager,
             onSettingsChanged: { [weak self] in self?.settingsDidChange() },
             onProvidersChanged: { [weak self] in self?.providersDidChange() }
         )
@@ -132,17 +132,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.applyPlacement()
         settingsWindow?.appearance = settings.appearance.nsAppearance
         notifications.reset()
-        Task { await store.refreshAll() }
+        Task { await manager.refreshAll() }
     }
 
     /// Rebuilds the provider list after one is added or removed, then re-lays the surface:
     /// the tab's width follows how many providers are shown.
     private func providersDidChange() {
         Task {
-            await store.rebuildProviders()
+            await manager.rebuildProviders()
             controller.reconcileSelection()
             controller.applyPlacement()
-            await store.refreshAll()
+            await manager.refreshAll()
         }
     }
 
@@ -160,11 +160,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let path = environment["SIDENOTCH_RENDER"] {
             Task {
-                await store.refreshAll()
+                await manager.refreshAll()
                 let focused = environment["SIDENOTCH_RENDER_FOCUS"]
                     .flatMap(ProviderType.init(rawValue:))
                 PreviewRenderer.render(
-                    to: path, store: store, settings: settings,
+                    to: path, manager: manager, settings: settings,
                     notch: placement.notch, selected: focused,
                     expanded: environment["SIDENOTCH_RENDER_EXPANDED"] == "1"
                 )

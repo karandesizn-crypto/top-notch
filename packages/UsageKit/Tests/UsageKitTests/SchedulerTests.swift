@@ -9,7 +9,7 @@ struct RefreshSchedulerTests {
     /// Records what the scheduler asked for, so timing policy can be tested without
     /// touching a provider.
     private final class Recorder {
-        var triggers: [RefreshScheduler.Trigger] = []
+        var triggers: [RefreshTrigger] = []
         var ticks = 0
         /// Held open to keep a refresh "in flight" while a second is attempted.
         var gate: CheckedContinuation<Void, Never>?

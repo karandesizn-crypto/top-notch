@@ -15,14 +15,14 @@ import UsageKit
 enum PreviewRenderer {
     static func render(
         to path: String,
-        store: UsageManager,
+        manager: UsageManager,
         settings: AppSettings,
         notch: NotchMetrics,
         selected: ProviderType?,
         expanded: Bool
     ) {
         let layout = SurfaceSizing.layout(
-            providerCount: store.visibleProviders.count,
+            providerCount: manager.visibleProviders.count,
             notch: notch,
             showsFigures: settings.showPercentages,
             showsAddButton: settings.canAddProvider
@@ -32,7 +32,7 @@ enum PreviewRenderer {
         state.isExpanded = expanded
         state.isPinned = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER_PINNED"] == "1"
         state.isMinimized = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER_MINI"] == "1"
-        state.selected = selected ?? store.visibleProviders.first ?? .codex
+        state.selected = selected ?? manager.visibleProviders.first ?? .codex
 
         let canvasWidth: CGFloat = 760
         let chromeHeight = notch.notchHeight
@@ -64,7 +64,7 @@ enum PreviewRenderer {
                 Spacer(minLength: 0)
             }
 
-            NotchRootView(store: store, settings: settings, surface: state, layout: layout)
+            NotchRootView(manager: manager, settings: settings, surface: state, layout: layout)
         }
         .frame(width: canvasWidth, height: canvasHeight)
         .environment(\.colorScheme, .dark)
