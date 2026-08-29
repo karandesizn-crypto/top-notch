@@ -28,6 +28,12 @@ enum Tokens {
         /// Gap below the menu bar.
         static let topInset: CGFloat = 8
 
+        /// Height of the hosting panel: enough for the rail, and never less than a full
+        /// card needs.
+        static func panelHeight(itemCount: Int) -> CGFloat {
+            max(geometry(itemCount: itemCount).panelHeight, Tokens.Card.reservedHeight)
+        }
+
         /// Layout arithmetic for the rail, shared with the tests in SideNotchCore.
         static func geometry(itemCount: Int) -> RailGeometry {
             RailGeometry(
@@ -49,6 +55,9 @@ enum Tokens {
         static let barHeight: CGFloat = 5
         /// Gap between the card's tail and the rail.
         static let railGap: CGFloat = 6
+        /// Vertical room reserved for a fully populated card. The panel is never shorter
+        /// than this, so a card beside a one-provider rail is not clipped.
+        static let reservedHeight: CGFloat = 320
     }
 
     // MARK: Color
@@ -85,13 +94,16 @@ enum Tokens {
         }
 
         /// Semantic colour for badges and alert treatments.
-        static func semantic(for health: UsageHealth) -> Color {
-            switch health {
-            case .healthy: good
+        ///
+        /// Driven by `UsageState`, which the user's thresholds control — distinct from the
+        /// ring ramp above, which is only how a percentage reads at a glance.
+        static func semantic(for state: UsageState) -> Color {
+            switch state {
+            case .normal: good
             case .warning: moderate
             case .critical: high
             case .exhausted: severe
-            case .unavailable: unavailable
+            case .unavailable, .loading: unavailable
             }
         }
     }

@@ -1,17 +1,18 @@
 import SwiftUI
 import SideNotchCore
 
-/// A provider's ring: percentage arc around a symbol, with the figure beneath.
+/// A provider's ring: usage arc around a symbol, with the figure beneath.
 struct UsageRing: View {
-    let snapshot: UsageSnapshot?
-    let provider: ProviderID
+    let status: ProviderStatus
     let isStale: Bool
     let isFocused: Bool
+    let showPercentage: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var percentage: Double? { snapshot?.percentageUsed }
-    private var ringColor: Color { Tokens.Palette.ring(forPercentage: percentage) }
+    private var window: UsageWindow? { status.headlineWindow }
+    private var fraction: Double? { window?.usedFraction }
+    private var percentage: Double? { window?.usedPercentage }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -19,33 +20,42 @@ struct UsageRing: View {
                 Circle()
                     .stroke(Tokens.Palette.track, lineWidth: Tokens.Rail.ringLineWidth)
 
-                if let percentage {
+                if let fraction {
                     Circle()
-                        .trim(from: 0, to: min(max(percentage / 100, 0), 1))
+                        .trim(from: 0, to: max(fraction, 0.001))
                         .stroke(
-                            ringColor,
+                            Tokens.Palette.ring(forPercentage: percentage),
                             style: StrokeStyle(lineWidth: Tokens.Rail.ringLineWidth, lineCap: .round)
                         )
-                        // Start the sweep at 12 o'clock rather than 3.
+                        .rotationEffect(.degrees(-90))   // start the sweep at 12 o'clock
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: fraction)
+                } else if status.state == .loading {
+                    Circle()
+                        .trim(from: 0, to: 0.18)
+                        .stroke(
+                            Tokens.Palette.unavailable,
+                            style: StrokeStyle(lineWidth: Tokens.Rail.ringLineWidth, lineCap: .round)
+                        )
                         .rotationEffect(.degrees(-90))
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.4), value: percentage)
                 }
 
-                Image(systemName: provider.symbolName)
+                Image(systemName: status.provider.symbolName)
                     .font(.system(size: Tokens.Rail.iconSize, weight: .medium))
                     .foregroundStyle(
-                        percentage == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
+                        fraction == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
                     )
             }
             .frame(width: Tokens.Rail.ringDiameter, height: Tokens.Rail.ringDiameter)
             .opacity(isStale ? 0.55 : 1)
 
-            Text(percentage.map { "\(Int($0.rounded()))%" } ?? "—")
-                .font(Tokens.Type_.percentage)
-                .foregroundStyle(
-                    percentage == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
-                )
-                .monospacedDigit()
+            if showPercentage {
+                Text(percentage.map { "\(Int($0.rounded()))%" } ?? "—")
+                    .font(Tokens.Type_.percentage)
+                    .foregroundStyle(
+                        fraction == nil ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
+                    )
+                    .monospacedDigit()
+            }
         }
         .padding(.top, Tokens.Rail.ringTopInset)
         .frame(width: Tokens.Rail.width, height: Tokens.Rail.itemHeight, alignment: .top)
@@ -62,12 +72,11 @@ struct UsageRing: View {
     }
 
     private var accessibilityLabel: String {
-        guard let snapshot else { return "\(provider.displayName), no data" }
-        guard let percentage = snapshot.percentageUsed else {
-            return "\(provider.displayName), usage unavailable"
+        guard let percentage else {
+            return "\(status.displayName), \(status.statusMessage ?? "unavailable")"
         }
-        var text = "\(provider.displayName), \(Int(percentage.rounded())) percent used"
-        if let phrase = ResetCalculator.resetPhrase(to: snapshot.resetAt) { text += ", \(phrase)" }
+        var text = "\(status.displayName), \(Int(percentage.rounded())) percent used"
+        if let phrase = ResetCalculator.resetPhrase(to: window?.resetDate) { text += ", \(phrase)" }
         if isStale { text += ", reading is stale" }
         return text
     }

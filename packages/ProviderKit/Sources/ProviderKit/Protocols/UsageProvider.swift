@@ -1,17 +1,58 @@
 import Foundation
 import SideNotchCore
 
-/// The single boundary between the UI and however a provider's usage is obtained.
+/// Everything that can go wrong reading a provider.
 ///
-/// Per `docs/ARCHITECTURE.md`, the UI never knows whether a reading came from an API, a
-/// local file, or a CLI — only what the normalized `UsageSnapshot` says.
+/// Distinguishing these is what lets the UI say something useful: "Codex isn't installed"
+/// and "Codex needs you to sign in" are both unavailable, but only one is worth a button.
+public enum ProviderError: Error, Equatable, Sendable {
+    /// The provider's software is not present on this machine.
+    case notInstalled
+    /// Present, but its local interface could not be started or has stopped.
+    case notRunning
+    /// Reachable, but the user is not signed in.
+    case authenticationRequired
+    /// This provider has no supported way to report usage yet.
+    case unsupported(reason: String)
+    case network(detail: String)
+    /// Reached the provider, but could not make sense of the reply — usually an
+    /// interface change.
+    case invalidResponse(detail: String)
+    case unknown(detail: String)
+
+    /// Short phrasing for the UI. Must never include credentials or raw responses.
+    public var userFacingDescription: String {
+        switch self {
+        case .notInstalled: "Not installed"
+        case .notRunning: "Not running"
+        case .authenticationRequired: "Sign-in required"
+        case .unsupported(let reason): reason
+        case .network: "Network unavailable"
+        case .invalidResponse: "Unexpected response"
+        case .unknown: "Unavailable"
+        }
+    }
+}
+
+/// The boundary between the app and however a provider's usage is obtained.
+///
+/// Deliberately free of any UI type. Adapters may spawn processes, read files, or call
+/// services; nothing above this protocol knows which.
 public protocol UsageProvider: Sendable {
     var id: ProviderID { get }
+    var displayName: String { get }
 
-    /// Returns every limit window this provider currently exposes.
-    ///
-    /// Implementations must not throw for "no data available" — that is a legitimate
-    /// result and should be returned as a snapshot with `health: .unavailable`. Throwing
-    /// is reserved for genuine read failures.
-    func fetchSnapshots() async throws -> [UsageSnapshot]
+    /// Prepares long-lived resources. Must be safe to call more than once.
+    func start() async
+
+    /// Releases those resources. Must be safe to call without a prior `start()`.
+    func stop() async
+
+    /// Reads current usage. Throws `ProviderError`; never blocks indefinitely.
+    func fetchSnapshot() async throws -> UsageSnapshot
+}
+
+public extension UsageProvider {
+    func start() async {}
+    func stop() async {}
 }

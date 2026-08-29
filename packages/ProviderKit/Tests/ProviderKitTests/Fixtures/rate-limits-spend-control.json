@@ -1,0 +1,9 @@
+{
+  "rateLimits": {
+    "limitId": "codex",
+    "primary": { "usedPercent": 96, "resetsAt": null, "windowDurationMins": null },
+    "secondary": null,
+    "individualLimit": { "limit": "$100.00", "used": "$85.00", "remainingPercent": 15, "resetsAt": 1791000000 },
+    "planType": "business", "spendControlReached": false
+  }
+}

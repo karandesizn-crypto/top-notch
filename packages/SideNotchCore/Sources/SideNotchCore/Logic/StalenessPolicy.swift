@@ -1,11 +1,11 @@
 import Foundation
 
-/// Decides when a snapshot is too old to present as live.
+/// Decides when a cached snapshot is too old to present as live.
 ///
-/// Per `docs/DOMAIN_MODEL.md`: a stale snapshot is visually marked as stale; it is never
-/// presented as live.
+/// A stale snapshot is marked, never shown as if it were current. This matters more than
+/// it sounds: a provider's cached figure can be hours old, and a confident-looking ring
+/// over a stale number is worse than an honest "unavailable".
 public struct StalenessPolicy: Sendable {
-    /// Readings older than this are stale.
     public let maxAge: TimeInterval
 
     public static let `default` = StalenessPolicy(maxAge: 15 * 60)
@@ -15,6 +15,10 @@ public struct StalenessPolicy: Sendable {
     }
 
     public func isStale(_ snapshot: UsageSnapshot, now: Date = Date()) -> Bool {
-        now.timeIntervalSince(snapshot.observedAt) > maxAge
+        now.timeIntervalSince(snapshot.lastUpdated) > maxAge
+    }
+
+    public func age(of snapshot: UsageSnapshot, now: Date = Date()) -> TimeInterval {
+        now.timeIntervalSince(snapshot.lastUpdated)
     }
 }

@@ -41,14 +41,24 @@ public struct RailGeometry: Sendable {
     /// The card centres on the ring it describes, then is clamped inside the panel. A card
     /// with one row is much shorter than one with three, so a fixed top would leave the
     /// tail unable to reach the lower rings.
-    public func cardOffset(index: Int, cardHeight: CGFloat) -> CGFloat {
+    /// - Parameter containerHeight: height of the panel the card is clamped inside. This
+    ///   is not always `panelHeight`: with a single provider the rail is short but the
+    ///   panel is kept tall enough for a full card, and clamping to the rail's height
+    ///   would slice the card off.
+    public func cardOffset(
+        index: Int, cardHeight: CGFloat, containerHeight: CGFloat? = nil
+    ) -> CGFloat {
         guard cardHeight > 0 else { return 0 }
+        let container = containerHeight ?? panelHeight
         let ideal = ringCenterY(index: index) - cardHeight / 2
-        return min(max(ideal, 0), max(0, panelHeight - cardHeight))
+        return min(max(ideal, 0), max(0, container - cardHeight))
     }
 
     /// Tail position within the card's own coordinate space.
-    public func tailCenterY(index: Int, cardHeight: CGFloat) -> CGFloat {
-        ringCenterY(index: index) - cardOffset(index: index, cardHeight: cardHeight)
+    public func tailCenterY(
+        index: Int, cardHeight: CGFloat, containerHeight: CGFloat? = nil
+    ) -> CGFloat {
+        ringCenterY(index: index)
+            - cardOffset(index: index, cardHeight: cardHeight, containerHeight: containerHeight)
     }
 }

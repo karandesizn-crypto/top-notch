@@ -1,56 +1,57 @@
 import AppKit
+import SwiftUI
 import SideNotchCore
 import ProviderKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var controller: RailWindowController?
-    private var store: UsageStore?
+    private var settings: AppSettings!
+    private var store: UsageStore!
+    private var controller: RailWindowController!
+    private var notifications: NotificationService!
     private var statusItem: NSStatusItem?
+    private var settingsWindow: NSWindow?
+
+    nonisolated override init() { super.init() }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Utility app: rail and menu bar only, no Dock icon, no main window.
+        // Background utility: rail and menu bar only, no Dock icon, no main window.
         NSApp.setActivationPolicy(.accessory)
 
-        let store = UsageStore(providers: Self.configuredProviders())
-        let controller = RailWindowController(store: store)
-        self.store = store
-        self.controller = controller
+        settings = AppSettings()
+        notifications = NotificationService()
+        let cache = SnapshotCache()
 
-        // Offscreen render mode for design verification; see PreviewRenderer.
-        if let path = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER"] {
-            Task {
-                await store.refresh()
-                let focused = ProcessInfo.processInfo.environment["SIDENOTCH_RENDER_FOCUS"]
-                    .flatMap(ProviderID.init(rawValue:))
-                PreviewRenderer.render(to: path, store: store, focused: focused)
-                NSApp.terminate(nil)
-            }
-            return
-        }
+        let providerOverride: [any UsageProvider]? =
+            ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1"
+            ? MockUsageProvider.showcase()
+            : nil
 
-        store.start()
+        store = UsageStore(
+            settings: settings, cache: cache, notifications: notifications,
+            providerOverride: providerOverride
+        )
+        controller = RailWindowController(store: store, settings: settings)
+
+        if handleDiagnosticModes() { return }
+
+        applyAppearance()
         controller.show()
         installStatusItem()
 
-        if ProcessInfo.processInfo.environment["SIDENOTCH_DIAGNOSE"] == "1" {
-            print(controller.placementDescription())
-            NSApp.terminate(nil)
+        Task {
+            await notifications.requestAuthorization()
+            await store.start()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        store?.stop()
+        // Terminating the app-server child process matters: it outlives us otherwise.
+        let store = self.store
+        Task { await store?.stop() }
     }
 
-    /// `SIDENOTCH_MOCK=1` swaps in fixture data — the design system is meant to be worked
-    /// on without waiting for a real limit to move.
-    private static func configuredProviders() -> [any UsageProvider] {
-        if ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1" {
-            return MockProvider.showcase()
-        }
-        return [ClaudeProvider(), CodexProvider(), CursorProvider()]
-    }
+    // MARK: Status item
 
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -60,22 +61,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        menu.addItem(
-            withTitle: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r"
-        ).target = self
+        menu.addItem(withTitle: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r")
+            .target = self
         menu.addItem(.separator())
-        menu.addItem(
-            withTitle: "Quit SideNotch", action: #selector(quit), keyEquivalent: "q"
-        ).target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+            .target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit SideNotch", action: #selector(quit), keyEquivalent: "q")
+            .target = self
         item.menu = menu
         statusItem = item
     }
 
     @objc private func refreshNow() {
-        Task { await store?.refresh() }
+        Task { await store.refreshAll() }
     }
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func openSettings() {
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = SettingsView(settings: settings, store: store) { [weak self] in
+            self?.settingsDidChange()
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
+            styleMask: [.titled, .closable],
+            backing: .buffered, defer: false
+        )
+        window.title = "SideNotch Settings"
+        window.contentView = NSHostingView(rootView: view)
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.appearance = settings.appearance.nsAppearance
+        settingsWindow = window
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Applies preference changes that affect windows rather than just rendering.
+    private func settingsDidChange() {
+        applyAppearance()
+        controller.applyAppearance()
+        controller.reposition()
+        settingsWindow?.appearance = settings.appearance.nsAppearance
+        notifications.reset()
+        Task { await store.refreshAll() }
+    }
+
+    private func applyAppearance() {
+        NSApp.appearance = settings.appearance.nsAppearance
+    }
+
+    // MARK: Diagnostics
+
+    /// Offscreen render and placement modes, used to verify the UI and window geometry
+    /// without screen-recording permission. Returns true when the app should not continue
+    /// to normal startup.
+    private func handleDiagnosticModes() -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+
+        if let path = environment["SIDENOTCH_RENDER"] {
+            Task {
+                await store.refreshAll()
+                let focused = environment["SIDENOTCH_RENDER_FOCUS"]
+                    .flatMap(ProviderID.init(rawValue:))
+                PreviewRenderer.render(to: path, store: store, settings: settings, focused: focused)
+                NSApp.terminate(nil)
+            }
+            return true
+        }
+
+        if environment["SIDENOTCH_DIAGNOSE"] == "1" {
+            controller.show()
+            print(controller.placementDescription())
+            NSApp.terminate(nil)
+            return true
+        }
+
+        return false
     }
 }

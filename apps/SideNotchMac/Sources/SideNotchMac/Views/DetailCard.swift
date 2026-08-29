@@ -1,34 +1,29 @@
 import SwiftUI
 import SideNotchCore
 
-/// The fly-out card for one provider: every limit window it exposes, each with a bar, a
-/// percentage, and a reset time.
+/// The fly-out card: every window the provider reports, each with a bar, a percentage, and
+/// a reset time. Rows are built from the snapshot, so a provider with one window renders
+/// one row and a provider with three renders three.
 struct DetailCard: View {
-    let provider: ProviderID
-    let snapshots: [UsageSnapshot]
+    let status: ProviderStatus
     let tailCenterY: CGFloat
-    let staleness: StalenessPolicy
+    let isStale: Bool
+    let showResetCountdown: Bool
     let now: Date
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
-                Image(systemName: provider.symbolName)
-                    .font(.system(size: 12, weight: .medium))
-                Text("\(provider.displayName) Usage")
-                    .font(Tokens.Type_.cardTitle)
-            }
-            .foregroundStyle(Tokens.Palette.primaryText)
+            header
 
-            if snapshots.isEmpty {
-                Text("No data")
-                    .font(Tokens.Type_.rowMeta)
-                    .foregroundStyle(Tokens.Palette.secondaryText)
-            } else {
-                ForEach(snapshots) { snapshot in
-                    row(for: snapshot)
+            if let windows = windowsToShow, !windows.isEmpty {
+                ForEach(windows) { window in
+                    row(for: window)
                 }
+            } else {
+                unavailableBody
             }
+
+            footer
         }
         .padding(Tokens.Card.padding)
         .padding(.trailing, Tokens.Card.tailWidth)
@@ -44,17 +39,81 @@ struct DetailCard: View {
         }
     }
 
-    @ViewBuilder
-    private func row(for snapshot: UsageSnapshot) -> some View {
-        let stale = staleness.isStale(snapshot, now: now)
+    private var windowsToShow: [UsageWindow]? {
+        guard let snapshot = status.snapshot, snapshot.availability.isAvailable else { return nil }
+        return snapshot.windows
+    }
 
+    private var header: some View {
+        HStack(spacing: 7) {
+            Image(systemName: status.provider.symbolName)
+                .font(.system(size: 12, weight: .medium))
+            Text("\(status.displayName) Usage")
+                .font(Tokens.Type_.cardTitle)
+            Spacer(minLength: 6)
+            if let plan = status.snapshot?.plan {
+                Text(plan.uppercased())
+                    .font(Tokens.Type_.rowMeta)
+                    .foregroundStyle(Tokens.Palette.secondaryText)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.white.opacity(0.09))
+                    )
+            }
+        }
+        .foregroundStyle(Tokens.Palette.primaryText)
+    }
+
+    private var unavailableBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(status.state == .loading ? "Checking…" : "Unavailable")
+                .font(Tokens.Type_.rowLabel)
+                .foregroundStyle(Tokens.Palette.primaryText)
+            if let message = status.statusMessage {
+                Text(message)
+                    .font(Tokens.Type_.rowMeta)
+                    .foregroundStyle(Tokens.Palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        let credits = status.snapshot?.credits
+        if let credits, credits.unlimited || (credits.resetCreditsAvailable ?? 0) > 0 || credits.balance != nil {
+            Divider().overlay(Color.white.opacity(0.08))
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 9))
+                Text(creditsText(credits))
+                    .font(Tokens.Type_.rowMeta)
+            }
+            .foregroundStyle(Tokens.Palette.secondaryText)
+        }
+    }
+
+    private func creditsText(_ credits: CreditsInfo) -> String {
+        if credits.unlimited { return "Unlimited credits" }
+        var parts: [String] = []
+        if let balance = credits.balance { parts.append(balance) }
+        if let resets = credits.resetCreditsAvailable, resets > 0 {
+            parts.append("\(resets) reset credit\(resets == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func row(for window: UsageWindow) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
-                Text(snapshot.windowLabel ?? snapshot.scope.rawValue.capitalized)
+                Text(window.label)
                     .font(Tokens.Type_.rowLabel)
                     .foregroundStyle(Tokens.Palette.primaryText)
                 Spacer(minLength: 8)
-                if let reset = resetText(for: snapshot) {
+                if showResetCountdown,
+                   let reset = ResetCalculator.resetPhrase(to: window.resetDate, from: now) {
                     Text(reset)
                         .font(Tokens.Type_.rowMeta)
                         .foregroundStyle(Tokens.Palette.secondaryText)
@@ -63,55 +122,31 @@ struct DetailCard: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Tokens.Palette.track)
-                    if let percentage = snapshot.percentageUsed {
+                    Capsule().fill(Tokens.Palette.track)
+                    if let fraction = window.usedFraction {
                         Capsule()
-                            .fill(Tokens.Palette.ring(forPercentage: percentage))
-                            .frame(width: geometry.size.width * min(max(percentage / 100, 0), 1))
+                            .fill(Tokens.Palette.ring(forPercentage: window.usedPercentage))
+                            .frame(width: geometry.size.width * fraction)
                     }
                 }
             }
             .frame(height: Tokens.Card.barHeight)
 
             HStack(spacing: 5) {
-                Text(snapshot.percentageUsed.map { "\(Int($0.rounded()))% Used" } ?? "Unavailable")
+                Text(window.usedPercentage.map { "\(Int($0.rounded()))% used" } ?? "Unavailable")
                     .font(Tokens.Type_.rowValue)
                     .foregroundStyle(
-                        snapshot.percentageUsed == nil
+                        window.usedFraction == nil
                             ? Tokens.Palette.unavailable : Tokens.Palette.primaryText
                     )
-                if stale {
-                    // DOMAIN_MODEL.md: a stale snapshot is marked, never shown as live.
+                if isStale {
+                    // A stale snapshot is marked, never presented as live.
                     Text("· stale")
                         .font(Tokens.Type_.rowMeta)
                         .foregroundStyle(Tokens.Palette.moderate)
                 }
             }
-
-            if let detail = snapshot.detail {
-                Text(detail)
-                    .font(Tokens.Type_.rowMeta)
-                    .foregroundStyle(Tokens.Palette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
-        .opacity(stale ? 0.75 : 1)
-    }
-
-    /// "Resets in 51 min" for anything within a day, otherwise a weekday and time —
-    /// a countdown of "6d 3h" is less useful than "Resets Thu 12:00 AM".
-    private func resetText(for snapshot: UsageSnapshot) -> String? {
-        guard let resetAt = snapshot.resetAt else { return nil }
-        let interval = resetAt.timeIntervalSince(now)
-        guard interval > 0 else { return "Resetting now" }
-
-        if interval < 86400 {
-            guard let countdown = ResetCalculator.countdown(to: resetAt, from: now) else { return nil }
-            return "Resets in \(countdown)"
-        }
-        let formatter = DateFormatter()
-        formatter.dateFormat = interval < 7 * 86400 ? "EEE h:mm a" : "MMM d, h:mm a"
-        return "Resets \(formatter.string(from: resetAt))"
+        .opacity(isStale ? 0.75 : 1)
     }
 }

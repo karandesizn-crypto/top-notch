@@ -59,9 +59,22 @@ so they cannot yield a percentage without inventing one.
 
 ---
 
-## Codex — `~/.codex/sessions/**/rollout-*.jsonl`
+## Codex — app-server (superseded the log-parsing approach)
 
-**Status: complete.** The best of the three: refreshed every turn, no credentials involved.
+**Status: shipped, live.** See `docs/CODEX_INTEGRATION.md` for the full contract.
+
+SideNotch now reads Codex through its **app-server** — the supported local JSON-RPC
+interface — calling `account/rateLimits/read` and subscribing to
+`account/rateLimits/updated`. That is strictly better than parsing rollout logs: it is a
+supported surface rather than an implementation detail, it returns the current value rather
+than the last one a session happened to write, and it pushes updates.
+
+The log-parsing approach below is retained only as background on how the shape was first
+discovered. **It is no longer used**, and its field names differ — the logs are snake_case
+(`used_percent`, `window_minutes`), the app-server is camelCase (`usedPercent`,
+`windowDurationMins`).
+
+### Former approach — session rollout logs (not used)
 
 Codex writes a `token_count` event on each turn:
 

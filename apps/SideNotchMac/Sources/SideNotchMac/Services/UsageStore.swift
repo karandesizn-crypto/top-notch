@@ -3,42 +3,121 @@ import Observation
 import SideNotchCore
 import ProviderKit
 
-/// Polls every provider and holds the latest snapshots for the UI.
+/// What the UI knows about one provider.
+struct ProviderStatus: Identifiable, Sendable {
+    let provider: ProviderID
+    let displayName: String
+    var snapshot: UsageSnapshot?
+    var error: ProviderError?
+    var isRefreshing: Bool
+
+    var id: ProviderID { provider }
+
+    /// State for the rail ring.
+    ///
+    /// A cached snapshot outranks `loading`, so a refresh does not blank a ring the user
+    /// was reading. An error only replaces a snapshot when there is no snapshot to keep.
+    var state: UsageState {
+        if let snapshot, snapshot.availability.isAvailable, !snapshot.windows.isEmpty {
+            return snapshot.overallState
+        }
+        if error != nil { return .unavailable }
+        return isRefreshing ? .loading : .unavailable
+    }
+
+    var headlineWindow: UsageWindow? { snapshot?.headlineWindow }
+
+    /// One-line explanation for the detail card.
+    var statusMessage: String? {
+        if let error { return error.userFacingDescription }
+        if let snapshot, snapshot.windows.isEmpty { return "No metered limits on this plan" }
+        return snapshot?.availability.reason
+    }
+}
+
+/// Coordinates the providers and holds what the UI renders.
 ///
-/// Adapters read files other apps own, so a refresh is cheap but not free; the interval is
-/// deliberately unhurried. Nothing here knows how any provider is read — that stays behind
-/// `UsageProvider`.
+/// Three properties matter here: a failing provider never blocks another, a failure never
+/// discards the last good reading, and nothing on this path can block the main thread —
+/// provider work happens off it and only the result is published.
 @Observable
 @MainActor
 final class UsageStore {
-    private(set) var snapshotsByProvider: [ProviderID: [UsageSnapshot]] = [:]
+    private(set) var statuses: [ProviderID: ProviderStatus] = [:]
     private(set) var lastRefresh: Date?
-    /// Ticks so countdown text re-renders without a full provider refresh.
+    /// Ticks so countdowns re-render without re-reading providers.
     private(set) var now: Date = Date()
 
-    let staleness = StalenessPolicy.default
-    /// Rail order, fixed so rings never reshuffle under the cursor.
+    /// Fixed rail order, so rings never reshuffle under the pointer.
     let order: [ProviderID] = [.claude, .codex, .cursor]
 
-    private let providers: [any UsageProvider]
-    private let refreshInterval: TimeInterval
+    let staleness = StalenessPolicy.default
+
+    private let settings: AppSettings
+    private let cache: SnapshotCache
+    private let notifications: NotificationService
+    private var providers: [ProviderID: any UsageProvider] = [:]
     private var refreshTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
+    private var inFlight: Set<ProviderID> = []
+    private let refreshTrigger = RefreshTrigger()
 
-    init(providers: [any UsageProvider]? = nil, refreshInterval: TimeInterval = 60) {
-        self.providers = providers ?? [ClaudeProvider(), CodexProvider(), CursorProvider()]
-        self.refreshInterval = refreshInterval
+    init(
+        settings: AppSettings,
+        cache: SnapshotCache,
+        notifications: NotificationService,
+        providerOverride: [any UsageProvider]? = nil
+    ) {
+        self.settings = settings
+        self.cache = cache
+        self.notifications = notifications
+
+        let built = providerOverride ?? Self.makeProviders(settings: settings, trigger: refreshTrigger)
+        for provider in built { providers[provider.id] = provider }
+
+        // Codex pushes `account/rateLimits/updated`; route it straight into a refresh so
+        // usage changes appear without waiting out the polling interval. The trigger box
+        // exists because the provider is built before `self` is available.
+        refreshTrigger.handler = { [weak self] in await self?.refresh(.codex) }
+
+        let cached = cache.load()
+        for id in order {
+            guard let provider = providers[id] else { continue }
+            statuses[id] = ProviderStatus(
+                provider: id,
+                displayName: provider.displayName,
+                snapshot: cached[id],
+                error: nil,
+                isRefreshing: false
+            )
+        }
     }
 
-    func start() {
+    private static func makeProviders(
+        settings: AppSettings, trigger: RefreshTrigger
+    ) -> [any UsageProvider] {
+        [
+            ClaudeUsageProvider(),
+            CodexUsageProvider(thresholds: settings.thresholds) { await trigger.fire() },
+            CursorUsageProvider(),
+        ]
+    }
+
+    /// Wires the Codex push notification to a refresh, so usage changes land without
+    /// waiting out the polling interval.
+    func start() async {
         guard refreshTask == nil else { return }
+
+        for provider in providers.values { await provider.start() }
+
         refreshTask = Task { [weak self] in
-            guard let self else { return }
             while !Task.isCancelled {
-                await refresh()
-                try? await Task.sleep(for: .seconds(refreshInterval))
+                await self?.refreshAll()
+                let interval = self?.settings.refreshInterval ?? 300
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
+
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -47,45 +126,82 @@ final class UsageStore {
         }
     }
 
-    func stop() {
+    func stop() async {
         refreshTask?.cancel(); refreshTask = nil
         tickTask?.cancel(); tickTask = nil
+        for provider in providers.values { await provider.stop() }
     }
 
-    func refresh() async {
-        await withTaskGroup(of: (ProviderID, [UsageSnapshot]).self) { group in
-            for provider in providers {
-                group.addTask {
-                    let snapshots = (try? await provider.fetchSnapshots()) ?? []
-                    return (provider.id, snapshots)
-                }
-            }
-            for await (id, snapshots) in group {
-                // A failed read leaves the previous reading in place rather than blanking
-                // the rail; staleness marking already tells the user it is old.
-                if !snapshots.isEmpty { snapshotsByProvider[id] = snapshots }
+    func refreshAll() async {
+        await withTaskGroup(of: Void.self) { group in
+            for id in order where settings.isEnabled(id) {
+                group.addTask { [weak self] in await self?.refresh(id) }
             }
         }
         now = Date()
         lastRefresh = now
     }
 
-    func snapshots(for provider: ProviderID) -> [UsageSnapshot] {
-        snapshotsByProvider[provider] ?? []
+    /// Refreshes one provider. Safe to call concurrently; duplicate requests are dropped.
+    func refresh(_ id: ProviderID) async {
+        guard let provider = providers[id], !inFlight.contains(id) else { return }
+        inFlight.insert(id)
+        statuses[id]?.isRefreshing = true
+        defer {
+            inFlight.remove(id)
+            statuses[id]?.isRefreshing = false
+        }
+
+        do {
+            let snapshot = try await provider.fetchSnapshot()
+            statuses[id]?.snapshot = snapshot
+            statuses[id]?.error = nil
+            cache.save(snapshot)
+            notifications.evaluate(
+                snapshot,
+                displayName: provider.displayName,
+                enabled: settings.notificationsEnabled
+            )
+        } catch let error as ProviderError {
+            // The last good snapshot is kept; staleness marking tells the user it is old.
+            statuses[id]?.error = error
+            Log.provider.notice("\(id.rawValue, privacy: .public) unavailable: \(error.userFacingDescription, privacy: .public)")
+        } catch {
+            statuses[id]?.error = .unknown(detail: "unexpected failure")
+        }
     }
 
-    /// The reading the rail ring shows: the most constrained active window, so the ring
-    /// always reflects whichever limit will bite first.
-    func headline(for provider: ProviderID) -> UsageSnapshot? {
-        let snapshots = self.snapshots(for: provider)
-        return snapshots
-            .filter { $0.percentageUsed != nil }
-            .max { ($0.percentageUsed ?? 0) < ($1.percentageUsed ?? 0) }
-            ?? snapshots.first
+    // MARK: Queries
+
+    var visibleProviders: [ProviderID] {
+        order.filter { settings.isEnabled($0) && statuses[$0] != nil }
     }
 
-    func isStale(_ snapshot: UsageSnapshot?) -> Bool {
-        guard let snapshot else { return false }
+    func status(for id: ProviderID) -> ProviderStatus? { statuses[id] }
+
+    func isStale(_ id: ProviderID) -> Bool {
+        guard let snapshot = statuses[id]?.snapshot else { return false }
         return staleness.isStale(snapshot, now: now)
+    }
+}
+
+
+/// Lets a provider signal "refresh me" before the store that handles it exists.
+///
+/// Providers are constructed inside the store's initializer, so they cannot capture
+/// `self`. This box is handed over at construction and given its handler once the store is
+/// ready; a push arriving in that window is simply dropped, which is correct — the first
+/// scheduled refresh is moments away.
+final class RefreshTrigger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _handler: (@Sendable () async -> Void)?
+
+    var handler: (@Sendable () async -> Void)? {
+        get { lock.withLock { _handler } }
+        set { lock.withLock { _handler = newValue } }
+    }
+
+    func fire() async {
+        await handler?()
     }
 }

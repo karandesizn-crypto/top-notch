@@ -1,11 +1,11 @@
 import Foundation
 
-/// Turns a reset date into the countdown string the rail and detail card show.
+/// Turns a reset date into the countdown text the rail and card show.
 public enum ResetCalculator {
-    /// Compact countdown, e.g. "2h 14m", "48m", "3d 4h".
+    /// Compact countdown: "2h 14m", "48m", "3d 4h".
     ///
-    /// Returns nil when there is no reset date. Returns "now" once the reset has passed —
-    /// the next poll will carry the new window.
+    /// Nil when there is no reset date. "now" once the reset has passed — the next refresh
+    /// carries the new window.
     public static func countdown(to resetAt: Date?, from now: Date = Date()) -> String? {
         guard let resetAt else { return nil }
         let remaining = resetAt.timeIntervalSince(now)
@@ -21,9 +21,45 @@ public enum ResetCalculator {
         return "\(max(minutes, 1))m"
     }
 
-    /// Full phrasing for the detail card, e.g. "resets in 2h 14m".
-    public static func resetPhrase(to resetAt: Date?, from now: Date = Date()) -> String? {
-        guard let value = countdown(to: resetAt, from: now) else { return nil }
-        return value == "now" ? "resetting now" : "resets in \(value)"
+    public static func countdown(to reset: ResetInfo?, from now: Date = Date()) -> String? {
+        countdown(to: reset?.date, from: now)
+    }
+
+    /// Phrasing for the detail card: "Resets in 51 min" within a day, otherwise a weekday
+    /// and time — "6d 3h" is less useful to a person than "Resets Sunday 8:00 PM".
+    public static func resetPhrase(
+        to resetAt: Date?, from now: Date = Date(), calendar: Calendar = .current
+    ) -> String? {
+        guard let resetAt else { return nil }
+        let remaining = resetAt.timeIntervalSince(now)
+        guard remaining > 0 else { return "Resetting now" }
+
+        if remaining < 3600 {
+            return "Resets in \(max(Int(remaining / 60), 1)) min"
+        }
+        if remaining < 86400 {
+            guard let value = countdown(to: resetAt, from: now) else { return nil }
+            return "Resets in \(value)"
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = .current
+        formatter.dateFormat = remaining < 7 * 86400 ? "EEEE h:mm a" : "MMM d, h:mm a"
+        return "Resets \(formatter.string(from: resetAt))"
+    }
+
+    /// Human label for a window duration, e.g. "5-hour", "Weekly", "30-day".
+    public static func windowLabel(forDuration duration: TimeInterval?) -> String? {
+        guard let duration, duration > 0 else { return nil }
+        let minutes = Int(duration / 60)
+        if minutes % (60 * 24) == 0 {
+            let days = minutes / (60 * 24)
+            if days == 7 { return "Weekly" }
+            if days == 1 { return "Daily" }
+            return "\(days)-day"
+        }
+        if minutes % 60 == 0 { return "\(minutes / 60)-hour" }
+        return "\(minutes)-minute"
     }
 }

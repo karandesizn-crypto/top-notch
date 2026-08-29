@@ -4,19 +4,16 @@ import SideNotchCore
 
 /// Renders the rail offscreen to a PNG.
 ///
-/// Verifying the silhouette, ring geometry, and card layout otherwise means eyeballing a
-/// live panel, which needs screen-recording permission and a human at the keyboard.
-/// `ImageRenderer` needs neither, so the design is checkable from a build script.
+/// Checking the live panel needs screen-recording permission and a person at the keyboard;
+/// `ImageRenderer` needs neither, so the interface stays verifiable from a build script.
 @MainActor
 enum PreviewRenderer {
-    static func render(to path: String, store: UsageStore, focused: ProviderID?) {
-        let size = RailWindowController.panelSize
-        let state = RailState()
-        state.focused = focused
-
-        // A backdrop stands in for a wallpaper so the black slab and its concave fillets
-        // are actually visible in the output.
+    static func render(
+        to path: String, store: UsageStore, settings: AppSettings, focused: ProviderID?
+    ) {
+        let size = RailWindowController.panelSize(providerCount: store.visibleProviders.count)
         let content = ZStack {
+            // Stands in for a wallpaper, so the black slab and its concave fillets show.
             LinearGradient(
                 colors: [
                     Color(red: 0.36, green: 0.72, blue: 0.86),
@@ -25,9 +22,10 @@ enum PreviewRenderer {
                 ],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
-            RailView(store: store, focused: .constant(focused))
+            RailView(store: store, settings: settings, focused: .constant(focused))
         }
         .frame(width: size.width, height: size.height)
+        .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
