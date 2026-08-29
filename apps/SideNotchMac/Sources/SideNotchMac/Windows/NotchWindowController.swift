@@ -23,7 +23,7 @@ final class NotchWindowController {
         self.settings = settings
         self.placement = placement
 
-        let layout = SurfaceSizing.layout(for: placement.notch)
+        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
         window = NotchWindow(contentRect: NSRect(origin: .zero, size: layout.windowSize))
 
         let container = PassthroughContentView(
@@ -46,12 +46,11 @@ final class NotchWindowController {
         container.interactiveRect = { [weak self] in
             guard let self else { return .zero }
             let windowSize = window.frame.size
-            let layout = SurfaceSizing.layout(for: placement.notch)
+            let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
             let size = SurfaceSizing.size(
                 layout: layout,
                 expanded: surface.isExpanded,
-                status: store.status(for: surface.selected),
-                providerCount: store.visibleProviders.count
+                status: store.status(for: surface.selected)
             )
             return CGRect(
                 x: (windowSize.width - size.width) / 2,
@@ -88,7 +87,7 @@ final class NotchWindowController {
     /// Called on launch and on every display change; a resolution or scaling change alters
     /// the housing's measured size, so the window is resized as well as moved.
     func applyPlacement() {
-        let layout = SurfaceSizing.layout(for: placement.notch)
+        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
         let frame = NotchPlacement.surfaceFrame(
             size: layout.windowSize, metrics: placement.notch, display: placement.display
         )
@@ -136,13 +135,14 @@ final class NotchWindowController {
     func placementDescription() -> String {
         let notch = placement.notch
         let display = placement.display
-        let layout = SurfaceSizing.layout(for: notch)
+        let layout = SurfaceSizing.layout(providerCount: store.visibleProviders.count)
         var lines: [String] = []
         lines.append("screens        \(NSScreen.screens.count)")
         lines.append("display        \(Int(display.frame.width))x\(Int(display.frame.height)) @\(display.backingScaleFactor)x")
         lines.append("physical notch \(notch.hasPhysicalNotch ? "yes" : "no")")
         lines.append("housing        \(notch.notchWidth)x\(notch.notchHeight) centred at x=\(notch.centerX)")
         lines.append("anchor top y   \(notch.anchorTopY)")
+        lines.append("providers      \(store.visibleProviders.count)")
         lines.append("collapsed      \(Int(layout.collapsedSize.width))x\(Int(layout.collapsedSize.height))")
         lines.append("expanded max   \(Int(layout.maximumExpandedSize.width))x\(Int(layout.maximumExpandedSize.height))")
         lines.append("window         \(Int(window.frame.width))x\(Int(window.frame.height)) at (\(Int(window.frame.minX)), \(Int(window.frame.minY)))")

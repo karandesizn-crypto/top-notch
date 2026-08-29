@@ -14,12 +14,13 @@ final class NotchSurfaceState {
     var selected: ProviderID = .codex
 }
 
-/// The notch surface: one shape that changes form between a compact status strip and a
-/// full usage panel.
+/// The notch surface: a compact tab hanging below the camera housing that opens into a
+/// usage panel.
 ///
-/// The housing row is always present and always laid out the same way, so expanding never
-/// moves the collapsed content — it only reveals more beneath it. That is what makes the
-/// transition read as a single surface transforming rather than a popover appearing.
+/// The chip row is the whole collapsed state and stays exactly where it is when the tab
+/// expands — it doubles as the provider switcher rather than being replaced by a second,
+/// larger row. Nothing moves on expand; content is only revealed beneath, which is what
+/// makes it read as one surface changing shape.
 struct NotchRootView: View {
     @Bindable var store: UsageStore
     @Bindable var settings: AppSettings
@@ -31,19 +32,15 @@ struct NotchRootView: View {
     private var expanded: Bool { surface.isExpanded }
     private var providers: [ProviderID] { store.visibleProviders }
     private var status: ProviderStatus? { store.status(for: surface.selected) }
-    private var hasSwitcher: Bool { providers.count > 1 }
 
     private var size: CGSize {
-        SurfaceSizing.size(
-            layout: layout, expanded: expanded, status: status, providerCount: providers.count
-        )
+        SurfaceSizing.size(layout: layout, expanded: expanded, status: status)
     }
 
     private var shape: NotchSurfaceShape {
         NotchSurfaceShape(
             flare: layout.flare,
-            bottomRadius: expanded
-                ? Tokens.Surface.expandedBottomRadius : Tokens.Surface.bottomRadius
+            bottomRadius: expanded ? Tokens.Surface.expandedRadius : Tokens.Surface.collapsedRadius
         )
     }
 
@@ -57,9 +54,9 @@ struct NotchRootView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            housingRow
+            chipRow
             if expanded {
-                expandedBody
+                detailCard
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -68,7 +65,7 @@ struct NotchRootView: View {
             shape
                 .fill(Tokens.Palette.surface)
                 .overlay { shape.stroke(Tokens.Palette.surfaceEdge, lineWidth: 0.5) }
-                .shadow(color: .black.opacity(0.5), radius: expanded ? 22 : 10, y: expanded ? 10 : 4)
+                .shadow(color: .black.opacity(0.45), radius: expanded ? 16 : 7, y: expanded ? 7 : 3)
         }
         .clipShape(shape)
         .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
@@ -80,9 +77,8 @@ struct NotchRootView: View {
             }
         }
         .onTapGesture { togglePinned() }
-        .accessibilityElement(children: expanded ? .contain : .ignore)
-        .accessibilityLabel(expanded ? "SideNotch usage panel" : label(for: status))
-        .accessibilityAddTraits(.isButton)
+        .accessibilityElement(children: expanded ? .contain : .contain)
+        .accessibilityLabel("SideNotch usage")
         .accessibilityHint(expanded ? "Click to collapse" : "Click to expand usage details")
     }
 
@@ -98,127 +94,76 @@ struct NotchRootView: View {
         }
     }
 
-    // MARK: Housing row
+    // MARK: Collapsed chip row
 
-    /// The strip either side of the camera housing.
-    ///
-    /// The middle is a hole, not a spacer with something behind it: nothing can render over
-    /// the physical housing, so the layout reserves its exact measured width.
-    private var housingRow: some View {
-        HStack(spacing: 0) {
-            leadingFlank
-                .frame(width: layout.flankWidth(expanded: expanded), alignment: .trailing)
-            Color.clear
-                .frame(width: layout.notchWidth)
-            trailingFlank
-                .frame(width: layout.flankWidth(expanded: expanded), alignment: .leading)
-        }
-        .frame(height: layout.rowHeight)
-        .padding(.horizontal, layout.flare)
-    }
-
-    private var leadingFlank: some View {
-        HStack(spacing: 6) {
-            Image(systemName: surface.selected.symbolName)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Tokens.Palette.primaryText)
-            Text(status?.displayName ?? surface.selected.displayName)
-                .font(Tokens.Type_.collapsedProvider)
-                .foregroundStyle(Tokens.Palette.primaryText)
-                .lineLimit(1)
-        }
-        .padding(.trailing, Tokens.Surface.horizontalPadding)
-    }
-
-    private var trailingFlank: some View {
-        HStack(spacing: 7) {
-            UsageRing(
-                state: status?.state ?? .loading,
-                fraction: status?.headlineWindow?.usedFraction,
-                symbolName: surface.selected.symbolName,
-                diameter: Tokens.Ring.collapsedDiameter,
-                lineWidth: Tokens.Ring.collapsedLineWidth,
-                glyphSize: Tokens.Ring.collapsedGlyph
-            )
-            Text(caption(for: status))
-                .font(Tokens.Type_.collapsedValue)
-                .foregroundStyle(
-                    status?.headlineWindow?.usedFraction == nil
-                        ? Tokens.Palette.secondaryText : Tokens.Palette.primaryText
-                )
-                .monospacedDigit()
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, Tokens.Surface.horizontalPadding)
-    }
-
-    // MARK: Expanded body
-
-    private var expandedBody: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if hasSwitcher {
-                providerRow.frame(height: layout.switcherHeight)
+    /// One chip per provider: a small ring and its figure. This is the entire collapsed
+    /// state, and the answer to "is my usage okay?" at a glance.
+    private var chipRow: some View {
+        HStack(spacing: Tokens.Surface.chipSpacing) {
+            ForEach(providers) { provider in
+                chip(provider)
             }
-            detailCard.frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, Tokens.Surface.bodyPadding + layout.flare)
-        .padding(.vertical, layout.bodyVerticalPadding)
-        .frame(
-            height: layout.expandedBodyHeight(
-                rowCount: SurfaceSizing.rowCount(for: status), hasSwitcher: hasSwitcher
-            )
-        )
+        .padding(.horizontal, layout.horizontalPadding + layout.flare)
+        .frame(height: layout.collapsedHeight)
     }
 
-    /// Every enabled provider at once, in the reference's language: a glyph in a disc, a
-    /// usage arc around it, the bold figure beneath. Selecting one swaps the card below
-    /// without moving the row.
-    private var providerRow: some View {
-        HStack(spacing: 0) {
-            ForEach(providers, id: \.self) { provider in
-                let providerStatus = store.status(for: provider)
-                Button {
-                    select(provider)
-                } label: {
-                    UsageRing(
-                        state: providerStatus?.state ?? .loading,
-                        fraction: providerStatus?.headlineWindow?.usedFraction,
-                        symbolName: provider.symbolName,
-                        diameter: Tokens.Ring.providerDiameter,
-                        lineWidth: Tokens.Ring.providerLineWidth,
-                        glyphSize: Tokens.Ring.providerGlyph,
-                        caption: caption(for: providerStatus),
-                        isEmphasized: provider == surface.selected
-                    )
-                    .frame(width: Tokens.Ring.providerSlotWidth)
-                    .contentShape(Rectangle())
+    private func chip(_ provider: ProviderID) -> some View {
+        let providerStatus = store.status(for: provider)
+        let isSelected = expanded && provider == surface.selected
+
+        return Button {
+            select(provider)
+        } label: {
+            HStack(spacing: 5) {
+                UsageRing(
+                    state: providerStatus?.state ?? .loading,
+                    fraction: providerStatus?.headlineWindow?.usedFraction,
+                    symbolName: provider.symbolName,
+                    diameter: Tokens.Ring.chipDiameter,
+                    lineWidth: Tokens.Ring.chipLineWidth,
+                    glyphSize: Tokens.Ring.chipGlyph
+                )
+                if settings.showPercentages {
+                    Text(caption(for: providerStatus))
+                        .font(Tokens.Type_.chipValue)
+                        .foregroundStyle(
+                            providerStatus?.headlineWindow?.usedFraction == nil
+                                ? Tokens.Palette.secondaryText : Tokens.Palette.primaryText
+                        )
+                        .monospacedDigit()
                 }
-                .buttonStyle(.plain)
-                .animation(Tokens.Motion.content(reduceMotion: reduceMotion), value: surface.selected)
-                .accessibilityLabel(label(for: providerStatus))
-                .accessibilityAddTraits(
-                    provider == surface.selected ? [.isSelected, .isButton] : .isButton
-                )
             }
-            Spacer(minLength: 0)
+            .frame(width: layout.chipWidth, height: layout.collapsedHeight - 6)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                }
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .animation(Tokens.Motion.content(reduceMotion: reduceMotion), value: surface.selected)
+        .accessibilityLabel(label(for: providerStatus))
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// Title, then one labelled bar per window with its figure and reset time.
+    // MARK: Expanded detail
+
     private var detailCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: layout.contentRowSpacing) {
+            HStack(spacing: 6) {
                 Image(systemName: surface.selected.symbolName)
-                    .font(.system(size: 12, weight: .medium))
-                Text("\(status?.displayName ?? surface.selected.displayName) Usage")
+                    .font(.system(size: 11, weight: .medium))
+                Text("\(settings.displayName(for: surface.selected)) Usage")
                     .font(Tokens.Type_.cardTitle)
                 Spacer(minLength: 6)
                 if let plan = status?.snapshot?.plan {
                     Text(plan.uppercased())
                         .font(Tokens.Type_.rowMeta)
                         .foregroundStyle(Tokens.Palette.secondaryText)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .padding(.horizontal, 5).padding(.vertical, 1.5)
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(Color.white.opacity(0.09))
@@ -235,14 +180,32 @@ struct NotchRootView: View {
             } else {
                 unavailableRow
             }
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, Tokens.Surface.bodyPadding + layout.flare)
+        .padding(.vertical, layout.bodyVerticalPadding)
+        .frame(
+            width: size.width,
+            height: layout.expandedBodyHeight(rowCount: SurfaceSizing.rowCount(for: status)),
+            alignment: .top
+        )
     }
 
     private func windowRow(_ window: UsageWindow) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(window.label)
-                .font(Tokens.Type_.rowLabel)
-                .foregroundStyle(Tokens.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(window.label)
+                    .font(Tokens.Type_.rowLabel)
+                    .foregroundStyle(Tokens.Palette.primaryText)
+                Spacer(minLength: 0)
+                if settings.showResetCountdown,
+                   let phrase = ResetCalculator.resetPhrase(to: window.resetDate, from: store.now) {
+                    Text(store.isStale(surface.selected) ? "\(phrase) · stale" : phrase)
+                        .font(Tokens.Type_.rowMeta)
+                        .foregroundStyle(Tokens.Palette.tertiaryText)
+                }
+            }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -252,30 +215,22 @@ struct NotchRootView: View {
                         // is nearly empty does not look like a missing reading.
                         Capsule()
                             .fill(Tokens.Palette.color(for: window.state))
-                            .frame(width: max(proxy.size.width * fraction, fraction > 0 ? 5 : 0))
+                            .frame(width: max(proxy.size.width * fraction, fraction > 0 ? 4 : 0))
                     }
                 }
             }
-            .frame(height: 5)
+            .frame(height: 4)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(window.usedPercentage.map { "\(Int($0.rounded()))% Used" } ?? "Unavailable")
-                    .font(Tokens.Type_.rowMeta)
-                    .foregroundStyle(Tokens.Palette.secondaryText)
-                    .monospacedDigit()
-                Spacer(minLength: 0)
-                if settings.showResetCountdown,
-                   let phrase = ResetCalculator.resetPhrase(to: window.resetDate, from: store.now) {
-                    Text(store.isStale(surface.selected) ? "\(phrase) · stale" : phrase)
-                        .font(Tokens.Type_.rowMeta)
-                        .foregroundStyle(Tokens.Palette.tertiaryText)
-                }
-            }
+            Text(window.usedPercentage.map { "\(Int($0.rounded()))% used" } ?? "Unavailable")
+                .font(Tokens.Type_.rowMeta)
+                .foregroundStyle(Tokens.Palette.secondaryText)
+                .monospacedDigit()
         }
+        .frame(height: layout.contentRowHeight, alignment: .top)
     }
 
     private var unavailableRow: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(status?.state == .loading ? "Checking…" : "Unavailable")
                 .font(Tokens.Type_.rowLabel)
                 .foregroundStyle(Tokens.Palette.primaryText)
@@ -296,6 +251,7 @@ struct NotchRootView: View {
     private func select(_ provider: ProviderID) {
         withAnimation(Tokens.Motion.content(reduceMotion: reduceMotion)) {
             surface.selected = provider
+            if !surface.isExpanded { surface.isExpanded = true }
         }
     }
 
@@ -303,7 +259,7 @@ struct NotchRootView: View {
 
     /// "Codex, 73 percent used, warning, resets in 51 minutes."
     private func label(for status: ProviderStatus?) -> String {
-        guard let status else { return "SideNotch, no provider selected" }
+        guard let status else { return "No provider" }
         var parts: [String] = [status.displayName]
 
         if let percentage = status.headlineWindow?.usedPercentage {

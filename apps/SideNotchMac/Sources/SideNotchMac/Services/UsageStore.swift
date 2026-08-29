@@ -48,9 +48,9 @@ final class UsageStore {
     /// Ticks so countdowns re-render without re-reading providers.
     private(set) var now: Date = Date()
 
-    /// Fixed presentation order, so the provider switcher never reshuffles under the
-    /// pointer as readings arrive.
-    let order: [ProviderID] = [.claude, .codex, .cursor, .chatgpt]
+    /// Presentation order: the three built-ins, then whatever the user added. Fixed, so
+    /// chips never reshuffle under the pointer as readings arrive.
+    private(set) var order: [ProviderID] = []
 
     let staleness = StalenessPolicy.default
 
@@ -75,6 +75,7 @@ final class UsageStore {
 
         let built = providerOverride ?? Self.makeProviders(settings: settings, trigger: refreshTrigger)
         for provider in built { providers[provider.id] = provider }
+        order = built.map(\.id)
 
         // Codex pushes `account/rateLimits/updated`; route it straight into a refresh so
         // usage changes appear without waiting out the polling interval. The trigger box
@@ -94,15 +95,48 @@ final class UsageStore {
         }
     }
 
+    /// Built-ins in shipped order, then one `CustomUsageProvider` per user-added tool.
     private static func makeProviders(
         settings: AppSettings, trigger: RefreshTrigger
     ) -> [any UsageProvider] {
-        [
+        var providers: [any UsageProvider] = [
             ClaudeUsageProvider(),
             CodexUsageProvider(thresholds: settings.thresholds) { await trigger.fire() },
             CursorUsageProvider(),
-            ChatGPTUsageProvider(),
         ]
+        for definition in settings.customProviders {
+            providers.append(
+                CustomUsageProvider(id: definition.providerID, displayName: definition.name)
+            )
+        }
+        return providers
+    }
+
+    /// Rebuilds the provider list after the user adds or removes one.
+    ///
+    /// Existing snapshots are kept, so adding a provider does not blank the readings
+    /// already on screen.
+    func rebuildProviders() async {
+        for provider in providers.values where !ProviderID.builtIn.contains(provider.id) {
+            await provider.stop()
+        }
+        var rebuilt: [ProviderID: any UsageProvider] = [:]
+        for provider in Self.makeProviders(settings: settings, trigger: refreshTrigger) {
+            // Built-in adapters are reused; only the custom set is rebuilt, so the Codex
+            // app-server connection survives a settings change.
+            rebuilt[provider.id] = providers[provider.id] ?? provider
+        }
+        providers = rebuilt
+        order = Self.makeProviders(settings: settings, trigger: refreshTrigger).map(\.id)
+
+        for id in order where statuses[id] == nil {
+            statuses[id] = ProviderStatus(
+                provider: id,
+                displayName: settings.displayName(for: id),
+                snapshot: nil, error: nil, isRefreshing: false
+            )
+        }
+        statuses = statuses.filter { order.contains($0.key) }
     }
 
     /// Wires the Codex push notification to a refresh, so usage changes land without
@@ -165,11 +199,22 @@ final class UsageStore {
                 enabled: settings.notificationsEnabled
             )
         } catch let error as ProviderError {
-            // The last good snapshot is kept; staleness marking tells the user it is old.
             statuses[id]?.error = error
+            // A transient failure keeps the last good snapshot, marked stale. A permanent
+            // one must not: an unsupported or uninstalled provider will never produce a
+            // newer reading, so a cached figure would sit there looking live forever.
+            if Self.isPermanent(error) { statuses[id]?.snapshot = nil }
             Log.provider.notice("\(id.rawValue, privacy: .public) unavailable: \(error.userFacingDescription, privacy: .public)")
         } catch {
             statuses[id]?.error = .unknown(detail: "unexpected failure")
+        }
+    }
+
+    /// Whether a failure means "there will never be data" rather than "not right now".
+    private static func isPermanent(_ error: ProviderError) -> Bool {
+        switch error {
+        case .unsupported, .notInstalled: true
+        case .notRunning, .authenticationRequired, .network, .invalidResponse, .unknown: false
         }
     }
 

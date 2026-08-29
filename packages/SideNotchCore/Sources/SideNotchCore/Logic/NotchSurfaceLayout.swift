@@ -3,120 +3,96 @@ import CoreGraphics
 
 /// Sizes for the notch surface in each state.
 ///
-/// Kept in Core, and driven by the hardware's measured housing rather than constants, so
-/// the same layout works on a 185pt notch, a wider one, or none at all. The window
-/// controller and the view both read these, which is what keeps the drawn shape and the
-/// window's hit region in agreement.
+/// The surface is a compact tab hanging below the camera housing, centred on it. It does
+/// not straddle the housing, so there is no reserved hole and no flanks — content simply
+/// lays out across the tab. That is both simpler and considerably smaller than spanning the
+/// menu bar row.
 public struct NotchSurfaceLayout: Sendable, Equatable {
-    /// Width of the physical housing. Zero on displays without one, which collapses the
-    /// two flanks into one continuous strip.
-    public let notchWidth: CGFloat
-    /// Height of the housing row.
-    public let notchHeight: CGFloat
-    /// Outward flare where the surface meets the top of the display.
+    /// Width of one provider chip in the collapsed tab: ring plus its figure.
+    public let chipWidth: CGFloat
+    public let collapsedHeight: CGFloat
+    public let horizontalPadding: CGFloat
+    /// Outward flare where the tab meets the chrome above it.
     public let flare: CGFloat
-    public let collapsedFlank: CGFloat
-    public let expandedFlank: CGFloat
-    /// Floor for the housing row, for displays with no housing height to borrow.
-    public let minimumRowHeight: CGFloat
-    /// Height of one usage-window row in the expanded body.
+    public let expandedWidth: CGFloat
     public let contentRowHeight: CGFloat
     public let contentRowSpacing: CGFloat
-    /// Height of the provider ring row, when more than one provider is shown.
-    public let switcherHeight: CGFloat
-    /// Height of the detail card's title line.
     public let cardTitleHeight: CGFloat
     public let bodyVerticalPadding: CGFloat
-    /// The expanded body is never shorter than this, so the usage ring always fits.
-    public let minimumBodyHeight: CGFloat
-    /// Rows the window reserves space for. The window is sized once, for the busiest
-    /// provider, so switching providers never resizes it mid-animation.
+    /// How many providers are shown; the collapsed tab is only as wide as it needs to be.
+    public let providerCount: Int
+
+    /// Window rows reserved for the busiest provider, so switching never resizes the window.
     public static let maximumRows = 2
 
     public init(
-        notchWidth: CGFloat,
-        notchHeight: CGFloat,
-        flare: CGFloat,
-        collapsedFlank: CGFloat,
-        expandedFlank: CGFloat,
-        minimumRowHeight: CGFloat,
-        contentRowHeight: CGFloat = 48,
-        contentRowSpacing: CGFloat = 10,
-        switcherHeight: CGFloat = 80,
-        cardTitleHeight: CGFloat = 24,
-        bodyVerticalPadding: CGFloat = 14,
-        minimumBodyHeight: CGFloat = 78
+        providerCount: Int,
+        chipWidth: CGFloat = 62,
+        collapsedHeight: CGFloat = 30,
+        horizontalPadding: CGFloat = 11,
+        flare: CGFloat = 10,
+        expandedWidth: CGFloat = 322,
+        contentRowHeight: CGFloat = 42,
+        contentRowSpacing: CGFloat = 9,
+        cardTitleHeight: CGFloat = 20,
+        bodyVerticalPadding: CGFloat = 11
     ) {
-        self.notchWidth = notchWidth
-        self.notchHeight = notchHeight
+        self.providerCount = max(providerCount, 1)
+        self.chipWidth = chipWidth
+        self.collapsedHeight = collapsedHeight
+        self.horizontalPadding = horizontalPadding
         self.flare = flare
-        self.collapsedFlank = collapsedFlank
-        self.expandedFlank = expandedFlank
-        self.minimumRowHeight = minimumRowHeight
+        self.expandedWidth = expandedWidth
         self.contentRowHeight = contentRowHeight
         self.contentRowSpacing = contentRowSpacing
-        self.switcherHeight = switcherHeight
         self.cardTitleHeight = cardTitleHeight
         self.bodyVerticalPadding = bodyVerticalPadding
-        self.minimumBodyHeight = minimumBodyHeight
     }
 
-    public init(notch: NotchMetrics, flare: CGFloat, collapsedFlank: CGFloat,
-                expandedFlank: CGFloat, minimumRowHeight: CGFloat) {
-        self.init(
-            notchWidth: notch.notchWidth,
-            notchHeight: notch.notchHeight,
-            flare: flare,
-            collapsedFlank: collapsedFlank,
-            expandedFlank: expandedFlank,
-            minimumRowHeight: minimumRowHeight
+    public var collapsedSize: CGSize {
+        CGSize(
+            width: chipWidth * CGFloat(providerCount) + horizontalPadding * 2 + flare * 2,
+            height: collapsedHeight
         )
     }
 
-    /// Height of the row alongside the housing.
-    public var rowHeight: CGFloat { max(notchHeight, minimumRowHeight) }
-
-    public var collapsedSize: CGSize {
-        CGSize(width: notchWidth + collapsedFlank * 2 + flare * 2, height: rowHeight)
-    }
-
-    /// Height of the expanded body for the content it actually holds.
+    /// Height of the expanded body, following the content it actually holds.
     ///
-    /// Driven by the row count rather than fixed, because providers differ: Codex reports
-    /// one window on some plans and two on others, and a fixed height leaves a void under
-    /// the single-window case.
-    public func expandedBodyHeight(rowCount: Int, hasSwitcher: Bool) -> CGFloat {
+    /// The collapsed chip row stays put when the tab expands and doubles as the provider
+    /// switcher, so the body holds only the detail card. A provider reporting one window
+    /// must not reserve the room a two-window provider needs, or the tab opens onto empty
+    /// space.
+    public func expandedBodyHeight(rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
         let rowsHeight = CGFloat(rows) * contentRowHeight
             + CGFloat(rows - 1) * contentRowSpacing
-        let switcher = hasSwitcher ? switcherHeight : 0
-        let total = bodyVerticalPadding * 2 + cardTitleHeight + rowsHeight + switcher
-        return max(total, minimumBodyHeight + switcher)
+        // The trailing `contentRowSpacing` is the gap between the title and the first row.
+        // Omitting it is what made rows overlap: the panel was a full gap too short.
+        return bodyVerticalPadding * 2 + cardTitleHeight + contentRowSpacing + rowsHeight
     }
 
-    public func expandedSize(rowCount: Int, hasSwitcher: Bool) -> CGSize {
+    public func expandedSize(rowCount: Int) -> CGSize {
         CGSize(
-            width: notchWidth + expandedFlank * 2 + flare * 2,
-            height: rowHeight + expandedBodyHeight(rowCount: rowCount, hasSwitcher: hasSwitcher)
+            width: max(expandedWidth, collapsedSize.width),
+            height: collapsedHeight + expandedBodyHeight(rowCount: rowCount)
         )
     }
 
     /// The largest the surface can get, which is what the window is sized for.
     public var maximumExpandedSize: CGSize {
-        expandedSize(rowCount: Self.maximumRows, hasSwitcher: true)
+        expandedSize(rowCount: Self.maximumRows)
     }
 
-    public func size(expanded: Bool, rowCount: Int, hasSwitcher: Bool) -> CGSize {
-        expanded ? expandedSize(rowCount: rowCount, hasSwitcher: hasSwitcher) : collapsedSize
+    public func size(expanded: Bool, rowCount: Int) -> CGSize {
+        expanded ? expandedSize(rowCount: rowCount) : collapsedSize
     }
 
-    /// Size of the hosting window: the largest state, so expanding never resizes the
-    /// window. The surface is drawn inside it and hit testing follows the drawn shape,
-    /// which keeps the animation entirely in SwiftUI.
-    public var windowSize: CGSize { maximumExpandedSize }
-
-    /// Content width available on one side of the housing, in the given state.
-    public func flankWidth(expanded: Bool) -> CGFloat {
-        expanded ? expandedFlank : collapsedFlank
+    /// Window size: wide and tall enough for every reachable state, so expanding is purely
+    /// a SwiftUI animation with no window resize.
+    public var windowSize: CGSize {
+        CGSize(
+            width: max(maximumExpandedSize.width, collapsedSize.width),
+            height: maximumExpandedSize.height
+        )
     }
 }

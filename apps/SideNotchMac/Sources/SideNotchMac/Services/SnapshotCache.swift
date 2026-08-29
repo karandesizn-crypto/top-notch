@@ -52,10 +52,12 @@ final class SnapshotCache {
 
         var result: [ProviderID: UsageSnapshot] = [:]
         for row in rows {
-            guard let id = ProviderID(rawValue: row.providerID),
-                  let snapshot = try? JSONDecoder().decode(UsageSnapshot.self, from: row.payload)
-            else { continue }
-            result[id] = snapshot
+            // Any identifier is valid now that providers can be user-added, so only the
+            // payload can fail to decode.
+            guard let snapshot = try? JSONDecoder().decode(
+                UsageSnapshot.self, from: row.payload
+            ) else { continue }
+            result[ProviderID(row.providerID)] = snapshot
         }
         return result
     }

@@ -7,6 +7,9 @@ struct SettingsView: View {
     @Bindable var settings: AppSettings
     let store: UsageStore
     let onSettingsChanged: () -> Void
+    let onProvidersChanged: () -> Void
+
+    @State private var newProviderName = ""
 
     var body: some View {
         TabView {
@@ -15,25 +18,66 @@ struct SettingsView: View {
             notificationsTab.tabItem { Label("Notifications", systemImage: "bell") }
             appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }
         }
-        .frame(width: 460, height: 340)
+        .frame(width: 470, height: 380)
     }
 
     // MARK: Providers
 
     private var providersTab: some View {
         Form {
-            Section {
-                ForEach(store.order, id: \.self) { provider in
+            Section("Built in") {
+                ForEach(ProviderID.builtIn) { provider in
                     providerRow(provider)
                 }
+            }
+
+            Section {
+                ForEach(settings.customProviders) { definition in
+                    HStack {
+                        providerRow(definition.providerID)
+                        Button {
+                            settings.removeCustomProvider(definition.providerID)
+                            onProvidersChanged()
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove \(definition.name)")
+                    }
+                }
+
+                HStack {
+                    TextField("Add a tool, e.g. Antigravity", text: $newProviderName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addProvider)
+                    Button("Add", action: addProvider)
+                        .disabled(!canAdd)
+                }
+            } header: {
+                Text("Your tools")
             } footer: {
-                Text("Only providers with a supported local interface can report usage. "
-                     + "Claude and Cursor are listed so they can be enabled the moment one exists.")
+                Text(settings.canAddProvider
+                     ? "Added tools appear in the row and are marked unavailable until an "
+                       + "integration exists for them. Only Codex reports live usage today."
+                     : "The row holds up to \(AppSettings.maximumProviders) tools.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var canAdd: Bool {
+        settings.canAddProvider
+            && !ProviderID.slug(from: newProviderName).isEmpty
+            && !settings.allProviders.contains(ProviderID(ProviderID.slug(from: newProviderName)))
+    }
+
+    private func addProvider() {
+        guard canAdd, settings.addCustomProvider(named: newProviderName) != nil else { return }
+        newProviderName = ""
+        onProvidersChanged()
     }
 
     @ViewBuilder
@@ -44,13 +88,12 @@ struct SettingsView: View {
             set: { settings.setEnabled($0, for: provider); onSettingsChanged() }
         )) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(status?.displayName ?? provider.displayName)
-                if let message = status?.statusMessage {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
-                } else if let window = status?.headlineWindow,
-                          let percentage = window.usedPercentage {
+                Text(settings.displayName(for: provider))
+                if let window = status?.headlineWindow, let percentage = window.usedPercentage {
                     Text("\(window.label) · \(Int(percentage.rounded()))% used")
                         .font(.caption).foregroundStyle(.secondary)
+                } else if let message = status?.statusMessage {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -89,7 +132,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Show percentages on the rail", isOn: $settings.showPercentages)
+                Toggle("Show percentages in the collapsed tab", isOn: $settings.showPercentages)
                 Toggle("Show reset countdown", isOn: $settings.showResetCountdown)
             }
         }
@@ -108,9 +151,15 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Thresholds") {
+            Section {
                 thresholdSlider("Warning", value: $settings.warningThreshold)
                 thresholdSlider("Critical", value: $settings.criticalThreshold)
+            } header: {
+                Text("Thresholds")
+            } footer: {
+                Text("These set both the ring colour and when alerts fire. Each window "
+                     + "notifies once per escalation.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -121,7 +170,7 @@ struct SettingsView: View {
     private func thresholdSlider(_ title: String, value: Binding<Double>) -> some View {
         HStack {
             Text(title).frame(width: 60, alignment: .leading)
-            Slider(value: value, in: 50...99, step: 1)
+            Slider(value: value, in: 20...99, step: 1)
             Text("\(Int(value.wrappedValue))%")
                 .monospacedDigit()
                 .frame(width: 40, alignment: .trailing)

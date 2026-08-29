@@ -21,12 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         settings = AppSettings()
         notifications = NotificationService()
-        let cache = SnapshotCache()
+
+        let usingMocks = ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1"
+        // Fixture runs get an in-memory cache. Sharing the real one let a mock render write
+        // figures that then outlived it, because a provider whose fetch fails keeps
+        // whatever the cache last held.
+        let cache = SnapshotCache(inMemory: usingMocks)
 
         let providerOverride: [any UsageProvider]? =
-            ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1"
-            ? MockUsageProvider.showcase()
-            : nil
+            usingMocks ? MockUsageProvider.showcase() : nil
 
         store = UsageStore(
             settings: settings, cache: cache, notifications: notifications,
@@ -93,9 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let view = SettingsView(settings: settings, store: store) { [weak self] in
-            self?.settingsDidChange()
-        }
+        let view = SettingsView(
+            settings: settings,
+            store: store,
+            onSettingsChanged: { [weak self] in self?.settingsDidChange() },
+            onProvidersChanged: { [weak self] in self?.providersDidChange() }
+        )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
             styleMask: [.titled, .closable],
@@ -121,6 +127,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.appearance = settings.appearance.nsAppearance
         notifications.reset()
         Task { await store.refreshAll() }
+    }
+
+    /// Rebuilds the provider list after one is added or removed, then re-lays the surface:
+    /// the tab's width follows how many providers are shown.
+    private func providersDidChange() {
+        Task {
+            await store.rebuildProviders()
+            controller.reconcileSelection()
+            controller.applyPlacement()
+            await store.refreshAll()
+        }
     }
 
     private func applyAppearance() {

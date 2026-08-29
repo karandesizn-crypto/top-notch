@@ -189,39 +189,39 @@ struct NotchPlacementTests {
         #expect(metrics.centerX == 756)
         #expect(metrics.notchMinX == 663.5)
         #expect(metrics.notchMaxX == 848.5)
-        #expect(metrics.anchorTopY == 982)          // merges with the very top of the display
+        // Hangs below the housing rather than straddling it.
+        #expect(metrics.anchorTopY == 950)          // 982 - 32
     }
 
-    @Test("a display without a housing falls back to the menu bar")
+    @Test("a display without a housing hangs below the menu bar")
     func nonNotchedMetrics() {
         let metrics = NotchPlacement.metrics(for: Self.externalDisplay)
         #expect(metrics.hasPhysicalNotch == false)
         #expect(metrics.notchWidth == 0)
         #expect(metrics.notchHeight == 22)
         #expect(metrics.centerX == -1280)           // that display's own centre
-        // Hangs below the menu bar rather than covering menu items across the centre.
         #expect(metrics.anchorTopY == 1415)
     }
 
-    @Test("the surface centres on the housing and hangs from the top of the display")
+    @Test("the surface centres on the housing and hangs from its lower edge")
     func surfaceOnNotchedDisplay() {
         let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
         let frame = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 220, height: 30), metrics: metrics, display: Self.notchedDisplay
         )
         #expect(frame.midX == 756)                  // centred on the housing
-        #expect(frame.maxY == 982)                  // flush with the top of the display
-        #expect(frame.height == 38)
+        #expect(frame.maxY == 950)                  // flush with the housing's lower edge
+        #expect(frame.height == 30)
     }
 
     @Test("expanding grows downward and keeps the top edge pinned")
     func expansionGrowsDownward() {
         let metrics = NotchPlacement.metrics(for: Self.notchedDisplay)
         let collapsed = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 220, height: 30), metrics: metrics, display: Self.notchedDisplay
         )
         let expanded = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 520, height: 260), metrics: metrics, display: Self.notchedDisplay
+            size: CGSize(width: 322, height: 200), metrics: metrics, display: Self.notchedDisplay
         )
         #expect(collapsed.maxY == expanded.maxY)    // the anchor never moves
         #expect(expanded.minY < collapsed.minY)     // it grows down
@@ -232,7 +232,7 @@ struct NotchPlacementTests {
     func surfaceOnExternalDisplay() {
         let metrics = NotchPlacement.metrics(for: Self.externalDisplay)
         let frame = NotchPlacement.surfaceFrame(
-            size: CGSize(width: 420, height: 38), metrics: metrics, display: Self.externalDisplay
+            size: CGSize(width: 220, height: 30), metrics: metrics, display: Self.externalDisplay
         )
         #expect(frame.midX == -1280)
         #expect(frame.maxY == 1415)                 // below that display's menu bar
@@ -273,85 +273,105 @@ struct NotchPlacementTests {
 
 @Suite("Notch surface layout")
 struct NotchSurfaceLayoutTests {
-    /// Built from the measured 185x32 housing.
-    let notched = NotchSurfaceLayout(
-        notchWidth: 185, notchHeight: 32, flare: 14,
-        collapsedFlank: 104, expandedFlank: 150, minimumRowHeight: 26
-    )
+    let three = NotchSurfaceLayout(providerCount: 3)
 
-    /// No housing: both flanks meet in the middle.
-    let flat = NotchSurfaceLayout(
-        notchWidth: 0, notchHeight: 22, flare: 14,
-        collapsedFlank: 104, expandedFlank: 150, minimumRowHeight: 26
-    )
+    @Test("the collapsed tab is only as wide as its providers need")
+    func collapsedWidthFollowsProviderCount() {
+        #expect(three.collapsedSize.height == 30)
+        // Three 62pt chips, 11pt padding and a 10pt flare either side.
+        #expect(three.collapsedSize.width == 228)
 
-    @Test("the collapsed surface straddles the housing")
-    func collapsedSize() {
-        #expect(notched.collapsedSize.width == 421)    // 185 + 104*2 + 14*2
-        #expect(notched.collapsedSize.height == 32)    // the housing's own height
+        let five = NotchSurfaceLayout(providerCount: 5)
+        #expect(five.collapsedSize.width > three.collapsedSize.width)
+        #expect(five.collapsedSize.width - three.collapsedSize.width == 124)   // two chips
     }
 
-    @Test("expanding grows in both directions")
+    @Test("the collapsed tab stays compact next to the expanded panel")
+    func collapsedIsCompact() {
+        // The point of the collapsed state is that it is small; guard against it creeping.
+        #expect(three.collapsedSize.height <= 32)
+        #expect(three.collapsedSize.width < three.expandedSize(rowCount: 2).width)
+    }
+
+    @Test("expanding grows downward from the same top edge")
     func expandedSize() {
-        let expanded = notched.expandedSize(rowCount: 2, hasSwitcher: true)
-        #expect(expanded.width == 513)                 // 185 + 150*2 + 14*2
-        #expect(expanded.width > notched.collapsedSize.width)
-        #expect(expanded.height > notched.collapsedSize.height)
+        let expanded = three.expandedSize(rowCount: 2)
+        #expect(expanded.width == 322)
+        #expect(expanded.height > three.collapsedSize.height)
+        // The collapsed row remains at the top of the expanded surface.
+        #expect(expanded.height == three.collapsedHeight + three.expandedBodyHeight(rowCount: 2))
     }
 
-    @Test("the body follows its content instead of leaving a void")
+    @Test("the body follows its content instead of opening onto empty space")
     func bodyHeightFollowsContent() {
-        // One window and no switcher is the common Codex case; it must not reserve the
-        // room a two-window provider with a switcher needs.
-        let single = notched.expandedBodyHeight(rowCount: 1, hasSwitcher: false)
-        let double = notched.expandedBodyHeight(rowCount: 2, hasSwitcher: false)
-        let doubleWithSwitcher = notched.expandedBodyHeight(rowCount: 2, hasSwitcher: true)
-
+        let single = three.expandedBodyHeight(rowCount: 1)
+        let double = three.expandedBodyHeight(rowCount: 2)
         #expect(single < double)
-        #expect(double < doubleWithSwitcher)
-        #expect(doubleWithSwitcher - double == notched.switcherHeight)
+        #expect(double - single == three.contentRowHeight + three.contentRowSpacing)
     }
 
-    @Test("the body never shrinks below the usage ring")
-    func minimumBodyHeight() {
-        #expect(notched.expandedBodyHeight(rowCount: 0, hasSwitcher: false) >= notched.minimumBodyHeight)
-        #expect(notched.expandedBodyHeight(rowCount: 1, hasSwitcher: false) >= notched.minimumBodyHeight)
+    @Test("a provider with no windows still gets one row's worth of space")
+    func zeroRows() {
+        #expect(three.expandedBodyHeight(rowCount: 0) == three.expandedBodyHeight(rowCount: 1))
     }
 
-    @Test("a display with no housing still gets a usable row")
-    func flatDisplayRow() {
-        // A 22pt menu bar is below the floor, so the row uses the minimum instead.
-        #expect(flat.rowHeight == 26)
-        #expect(flat.collapsedSize.width == 236)       // 0 + 104*2 + 14*2
-        #expect(flat.collapsedSize.height == 26)
-    }
-
-    @Test("the window is sized for the busiest state, so switching never resizes it")
+    @Test("the window fits every reachable state, so expanding never resizes it")
     func windowSize() {
-        #expect(notched.windowSize == notched.maximumExpandedSize)
-        // Every reachable state fits inside the window.
-        for rows in 0...NotchSurfaceLayout.maximumRows {
-            for switcher in [true, false] {
-                let size = notched.expandedSize(rowCount: rows, hasSwitcher: switcher)
-                #expect(size.height <= notched.windowSize.height)
-                #expect(size.width <= notched.windowSize.width)
+        for count in 1...6 {
+            let layout = NotchSurfaceLayout(providerCount: count)
+            #expect(layout.windowSize.width >= layout.collapsedSize.width)
+            for rows in 0...NotchSurfaceLayout.maximumRows {
+                let size = layout.expandedSize(rowCount: rows)
+                #expect(size.width <= layout.windowSize.width)
+                #expect(size.height <= layout.windowSize.height)
             }
         }
     }
 
-    @Test("flank width follows the state")
-    func flankWidth() {
-        #expect(notched.flankWidth(expanded: false) == 104)
-        #expect(notched.flankWidth(expanded: true) == 150)
+    @Test("many providers widen the collapsed tab past the expanded panel")
+    func manyProviders() {
+        // Six chips exceed the fixed expanded width, so the window must follow the wider of
+        // the two rather than clipping the collapsed tab.
+        let many = NotchSurfaceLayout(providerCount: 6)
+        #expect(many.collapsedSize.width > 322)
+        #expect(many.windowSize.width == many.collapsedSize.width)
+        #expect(many.expandedSize(rowCount: 1).width == many.collapsedSize.width)
+    }
+}
+
+@Suite("Provider identity")
+struct ProviderIDTests {
+    @Test("the three built-ins are the shipped set")
+    func builtIns() {
+        #expect(ProviderID.builtIn == [.claude, .codex, .cursor])
+        #expect(ProviderID.claude.isBuiltIn)
+        #expect(ProviderID("antigravity").isBuiltIn == false)
     }
 
-    @Test("layout can be built straight from measured notch metrics")
-    func fromMetrics() {
-        let metrics = NotchPlacement.metrics(for: NotchPlacementTests.notchedDisplay)
-        let layout = NotchSurfaceLayout(
-            notch: metrics, flare: 14, collapsedFlank: 104,
-            expandedFlank: 150, minimumRowHeight: 26
-        )
-        #expect(layout == notched)
+    @Test("a custom provider is a first-class identifier")
+    func customProvider() {
+        let custom = ProviderID("antigravity")
+        #expect(custom.rawValue == "antigravity")
+        #expect(custom.defaultDisplayName == "Antigravity")
+    }
+
+    @Test("identifiers encode as bare strings, so cached snapshots still decode")
+    func codingIsStable() throws {
+        let data = try JSONEncoder().encode(ProviderID.codex)
+        #expect(String(data: data, encoding: .utf8) == "\"codex\"")
+        #expect(try JSONDecoder().decode(ProviderID.self, from: data) == .codex)
+    }
+
+    @Test(
+        "titles become usable identifiers",
+        arguments: [
+            ("Antigravity", "antigravity"),
+            ("My Gateway", "my-gateway"),
+            ("  Spaced  ", "spaced"),
+            ("Weird!!Chars", "weirdchars"),
+        ]
+    )
+    func slugs(title: String, expected: String) {
+        #expect(ProviderID.slug(from: title) == expected)
     }
 }

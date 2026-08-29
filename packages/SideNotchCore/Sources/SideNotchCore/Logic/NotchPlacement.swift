@@ -53,9 +53,10 @@ public struct NotchMetrics: Sendable, Equatable {
     public let centerX: CGFloat
     /// The y the surface's top edge anchors to, in AppKit screen coordinates.
     ///
-    /// On a notched display this is the very top of the display, so the surface merges with
-    /// the housing. Without a housing it is the bottom of the menu bar, so the surface hangs
-    /// below it rather than covering menu items across the centre of the screen.
+    /// The surface hangs *below* the top chrome rather than straddling it: on a notched
+    /// display that is the bottom edge of the camera housing, and without a housing it is
+    /// the bottom of the menu bar. Both read as the dark strip above continuing downward,
+    /// and neither covers menu bar items.
     public let anchorTopY: CGFloat
     public let backingScaleFactor: CGFloat
 
@@ -100,7 +101,8 @@ public enum NotchPlacement {
             notchWidth: notchWidth,
             notchHeight: display.safeAreaTop,
             centerX: centerX,
-            anchorTopY: display.frame.maxY,
+            // Below the housing, not the top of the display.
+            anchorTopY: display.frame.maxY - display.safeAreaTop,
             backingScaleFactor: display.backingScaleFactor
         )
     }
