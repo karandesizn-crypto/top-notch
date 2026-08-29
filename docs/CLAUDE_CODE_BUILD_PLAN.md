@@ -78,3 +78,14 @@ Only add sync/account backend if it solves a real product need.
 - Prefer structured concurrency.
 - Add tests for calculations and provider normalization.
 - Avoid third-party dependencies unless they solve a clear problem.
+
+---
+
+## Amendment — provider order
+
+Phase 4's Claude → Cursor → Codex ordering predates the data probe. See
+`docs/DATA_SOURCES.md`: the real order is **Codex → Claude → Cursor**, and Cursor has no
+local data at all, so it ships as an explicit unavailable state rather than an integration.
+
+A thin slice of Phase 4 (all three adapters + the `tools/usage-probe` CLI) was built before
+Phases 1–3, so the UI is built over proven data rather than over an assumption.
