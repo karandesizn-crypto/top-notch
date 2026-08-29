@@ -15,9 +15,8 @@ enum SurfaceSizing {
             notchWidth: notch.notchWidth,
             housingRowHeight: notch.notchHeight,
             showsAddButton: showsAddButton,
-            // Without figures the row loses the caption's height.
-            chipRowHeight: showsFigures ? Tokens.Ring.chipRowHeight
-                                        : Tokens.Ring.chipRowHeightRingOnly,
+            // A figure beside the ring widens every chip, and the strip with it.
+            chipWidth: showsFigures ? Tokens.Ring.chipWidthWithFigure : Tokens.Ring.chipWidth,
             flare: Tokens.Surface.flare
         )
     }

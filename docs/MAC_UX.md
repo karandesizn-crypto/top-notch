@@ -50,97 +50,53 @@ covers is affected.
 
 ## States
 
-### Collapsed
+### Resting
 
-One ring per provider, plus a `+` to add another. Nothing else.
+Chips either side of the camera, inside the menu bar row.
 
 ```
-     ╭──────────────────╮
-     │      camera      │   <- empty band, the housing's height
-     │  ◔   ◔   ◔    +  │
-     │ 73%  21%  52%    │
-     ╰──────────────────╯
+   ╭────┬──────────┬────╮
+   │ ◔ ◔│  camera  │◔  +│   <- 333 x 32pt, entirely in the menu bar row
+   ╰────┴──────────┴────╯
 ```
 
-**Exactly the width of the camera housing** — 185×78pt on the machine this was built
-against. Matching the housing is what makes it read as the notch rather than a bar poking
-out either side of it. The chips divide that width between them; the surface only grows
-past the housing once enough tools are added that the chips would otherwise be squeezed
-below a legible size.
+**Exactly the housing's height and nothing below it**, so no part of the desktop is covered
+or made unclickable. That is the whole constraint this layout exists to satisfy: an earlier
+version hung 46pt below the menu bar and made a Finder toolbar and a row of browser tabs
+unreachable.
 
-The top band is the housing's height and stays empty, since nothing can be drawn over the
-camera. Every item sits *below* that band, where the display is unobstructed, which is what
-lets the providers read as one continuous group.
+It is *wider* than the housing by necessity. The camera has no pixels behind it, so content
+cannot be centred on the notch — it has to sit beside it. The chips split as evenly as the
+count allows, with the remainder on the left.
+
+Percentages beside each ring are a setting, off by default: they widen every chip and the
+strip with them.
+
+### Hovering a chip
+
+A two-line snippet drops below the row: which provider and window, then the figure and its
+reset.
+
+```
+   ╭────┬──────────┬────╮
+   │ ◔ ◔│  camera  │◔  +│
+   ├────┴──────────┴────┤
+   │ ✳ Claude · 5-hour  │
+   │ 73% used · resets  │
+   ╰────────────────────╯
+```
+
+A glance, not a panel — 333×84 in total. The most constrained window is the one shown, so a
+provider reporting several does not make it taller; the limit that will bite first is the
+only one worth reading here. This is the only state that reaches below the menu bar, and
+only while the pointer is on a chip.
 
 ### Minimized
 
-Hovering the housing band tucks the surface away to that band alone. The housing row has no
-pixels, so a surface that size covers nothing and every window beneath it stays clickable —
-the way to clear the screen without quitting. Hovering the band again brings it back.
-
+Hovering the camera band drops the chips, leaving the strip the width of the housing alone —
+effectively invisible, since that region has no pixels. Hovering it again brings them back.
 It toggles on entry rather than continuously, so one pass of the pointer fires it once
 instead of flickering while the pointer rests there.
-
-Each provider is drawn with its own mark; see `docs/PROVIDER_MARKS.md`, including how to
-drop in exact brand artwork and the trademark question that needs answering before
-release. It answers one question — *is my usage okay?* — and the
-ring's colour answers it without needing a figure. Turning on "show percentages" widens
-every chip from 30pt to 58pt, which is why it is off by default: the collapsed tab's whole
-job is to be small.
-
-The figure behind each ring is the **most constrained** window, because that is the limit
-that will bite first.
-
-### Expanded
-
-**Hovering a ring** opens the card for that provider. Entering the tab does not expand it on
-its own — a specific ring has to be hovered — so the card always describes something the
-pointer is actually on rather than whatever was selected last. Leaving the tab collapses it.
-
-The chip row does not move. It stays exactly where it is and doubles as the provider
-switcher; the card is revealed beneath it. Nothing relayouts, which is what makes it read as
-one surface changing shape rather than a panel appearing.
-
-```
-     ╭─────────────────────────────╮
-     │  ◔ 73%   ◔ 21%   ◔ 52%      │
-     │                             │
-     │  ✳ Claude Usage       MAX   │
-     │  5-hour      Resets in 51m  │
-     │  ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░         │
-     │  73% used                   │
-     │  Weekly     Resets Tue 7 PM │
-     │  ▓▓▓▓░░░░░░░░░░░░░░         │
-     │  21% used                   │
-     ╰─────────────────────────────╯
-```
-
-Body height follows its content. A provider reporting one window does not reserve the room
-a two-window provider needs.
-
-Rows are whatever windows the provider actually reports — Claude's 5-hour and weekly,
-Codex's metered window — labelled from the provider's own data rather than from a fixed
-list. Codex also reports account token totals, shown as "2.2M today" beside the plan badge
-when there is usage that day.
-
-**There is no context-window row.** A context window is per-conversation state; Codex
-reports it through `thread/tokenUsage/updated` for a thread the client owns, and SideNotch
-owns no thread. Nothing available to an ambient account-level tool carries that figure, so
-none is shown rather than one invented.
-
-## Providers
-
-Three ship with adapters: **Claude, Codex, Cursor**. Only Codex reports live usage today;
-the other two are documented unsupported adapters (see `docs/DATA_SOURCES.md`).
-
-Users can add their own — Antigravity, an internal gateway, anything — in Settings. A
-custom provider appears in the row and reports honestly that SideNotch has no interface it
-can read. That is deliberate: someone working across four assistants wants all four in the
-row, and inventing an integration would be worse than admitting there isn't one. When a
-tool ships a supported local interface, writing an adapter is the only change needed.
-
-`ProviderID` is a string wrapper rather than an enum precisely so this needs no code change
-per tool. The row is capped at six, so the tab cannot outgrow the display.
 
 ## Silhouette
 

@@ -118,19 +118,26 @@ struct NotchRootView: View {
         providers.map(RowItem.provider) + (layout.showsAddButton ? [.add] : [])
     }
 
-    /// The housing band, then one continuous provider row beneath it.
+    /// The resting strip: chips either side of the camera, inside the menu bar row.
     ///
-    /// The band is empty on purpose: it is the height of the camera, which nothing can be
-    /// drawn over. Putting the row below it rather than either side of it is what lets the
-    /// providers sit together as one group.
+    /// The middle is a hole, not a spacer with something behind it. The camera has no
+    /// pixels, so the layout reserves its measured width and the chips split around it —
+    /// which is also why the strip is wider than the housing while being no taller.
     ///
-    /// Hovering the band itself tucks the surface away, so a pass of the pointer over the
-    /// notch clears the screen. Toggling on entry rather than continuously means it fires
-    /// once per pass instead of flickering while the pointer rests there.
+    /// Hovering that middle band tucks the chips away, so a pass of the pointer over the
+    /// notch clears the strip. It toggles on entry rather than continuously, so one pass
+    /// fires it once instead of flickering while the pointer rests there.
     private var chipRow: some View {
-        VStack(spacing: 0) {
+        let items = rowItems
+        let split = min(layout.leadingItemCount, items.count)
+
+        return HStack(spacing: 0) {
+            if !minimized {
+                ForEach(items.prefix(split), id: \.self) { item($0) }
+            }
+
             Color.clear
-                .frame(height: layout.housingRowHeight)
+                .frame(width: layout.notchWidth)
                 .contentShape(Rectangle())
                 .onHover { hovering in
                     guard hovering, !surface.isPinned else { return }
@@ -141,14 +148,10 @@ struct NotchRootView: View {
                 }
 
             if !minimized {
-                HStack(spacing: 0) {
-                    ForEach(rowItems, id: \.self) { item($0) }
-                }
-                .frame(height: layout.chipRowHeight)
-                .transition(.opacity)
+                ForEach(items.dropFirst(split), id: \.self) { item($0) }
             }
         }
-        .frame(height: minimized ? layout.minimizedSize.height : layout.collapsedHeight)
+        .frame(height: layout.housingRowHeight)
     }
 
     @ViewBuilder
@@ -162,11 +165,11 @@ struct NotchRootView: View {
     private var addButton: some View {
         Button(action: onAddProvider) {
             Image(systemName: "plus")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Tokens.Palette.secondaryText)
                 .frame(width: Tokens.Ring.chipDiameter, height: Tokens.Ring.chipDiameter)
                 .background { Circle().fill(Color.white.opacity(0.08)) }
-                .frame(width: layout.chipWidth, height: layout.chipRowHeight, alignment: .top)
+                .frame(width: layout.chipWidth, height: layout.housingRowHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -180,7 +183,7 @@ struct NotchRootView: View {
         return Button {
             select(provider)
         } label: {
-            VStack(spacing: 5) {
+            HStack(spacing: 4) {
                 UsageRing(
                     state: providerStatus?.state ?? .loading,
                     fraction: providerStatus?.headlineWindow?.usedFraction,
@@ -199,19 +202,19 @@ struct NotchRootView: View {
                         .monospacedDigit()
                 }
             }
-            .frame(width: layout.chipWidth, height: layout.chipRowHeight, alignment: .top)
+            .frame(width: layout.chipWidth, height: layout.housingRowHeight)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.09))
-                        .padding(.horizontal, 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .padding(.vertical, 3)
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .animation(Tokens.Motion.content(reduceMotion: reduceMotion), value: surface.selected)
-        // Hovering a chip is what opens the card, and which chip decides what it shows.
+        // Hovering a chip is what opens the snippet, and which chip decides what it shows.
         .onHover { hovering in
             guard hovering, !surface.isPinned, !surface.isMinimized else { return }
             withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {

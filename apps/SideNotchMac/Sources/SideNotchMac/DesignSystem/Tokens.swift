@@ -18,13 +18,13 @@ enum Tokens {
     }
 
     enum Ring {
-        /// The provider rings, sized to fit a row exactly as wide as the camera housing.
-        static let chipDiameter: CGFloat = 26
-        static let chipLineWidth: CGFloat = 2.6
-        static let chipGlyph: CGFloat = 13
-        static let chipRowHeight: CGFloat = 46
-        /// Without figures beneath, the row loses the caption's height.
-        static let chipRowHeightRingOnly: CGFloat = 36
+        /// The provider rings, sized to sit inside the menu bar row beside the camera.
+        static let chipDiameter: CGFloat = 21
+        static let chipLineWidth: CGFloat = 2.2
+        static let chipGlyph: CGFloat = 11
+        /// Chip widths with and without a figure beside the ring.
+        static let chipWidth: CGFloat = 28
+        static let chipWidthWithFigure: CGFloat = 54
     }
 
     enum Palette {

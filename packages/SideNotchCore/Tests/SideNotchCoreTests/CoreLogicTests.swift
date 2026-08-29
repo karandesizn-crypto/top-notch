@@ -277,44 +277,58 @@ struct NotchSurfaceLayoutTests {
     /// Three tools on the measured 185x32 housing.
     let three = NotchSurfaceLayout(providerCount: 3, notchWidth: 185, housingRowHeight: 32)
 
-    @Test("the collapsed surface is exactly the width of the housing")
-    func matchesNotchWidth() {
-        // The whole point: it reads as the notch, not a bar poking out either side.
-        #expect(three.collapsedSize.width == 185)
-        #expect(three.collapsedSize.height == 78)   // 32 housing + 46 row
+    @Test("the resting strip is exactly the housing's height")
+    func restingStripFitsTheNotchRow() {
+        // The point: it lives in the menu bar row and covers nothing on the desktop.
+        #expect(three.collapsedSize.height == 32)
+        #expect(three.collapsedSize.height == three.housingRowHeight)
     }
 
-    @Test("chips divide the housing's width between them")
-    func chipsShareTheWidth() {
-        #expect(three.itemCount == 4)               // three rings and the add button
-        #expect(three.contentWidth == 145)          // 185 - 24 flare - 16 padding
-        #expect(three.chipWidth == 145.0 / 4)
-        #expect(three.chipWidth >= three.minimumChipWidth)
+    @Test("it is wider than the housing, because the camera has no pixels behind it")
+    func widerThanHousingByNecessity() {
+        // Four chips at 28pt, 16pt padding, 24pt flare, either side of the 185pt camera.
+        #expect(three.itemCount == 4)
+        #expect(three.collapsedSize.width == 337)
+        #expect(three.collapsedSize.width > three.notchWidth)
     }
 
-    @Test("enough tools eventually widen the surface rather than squeezing the chips")
-    func legibilityWinsEventually() {
-        let many = NotchSurfaceLayout(providerCount: 6, notchWidth: 185, housingRowHeight: 32)
-        #expect(many.collapsedSize.width > 185)
-        #expect(many.chipWidth >= many.minimumChipWidth)
+    @Test("chips split either side of the camera, remainder on the left")
+    func chipsSplitAroundTheCamera() {
+        #expect(three.leadingItemCount == 2)
+        #expect(three.leadingFlankWidth == 56)
+        #expect(three.trailingFlankWidth == 56)
+        #expect(three.isLeading(itemIndex: 0))
+        #expect(three.isLeading(itemIndex: 3) == false)
+
+        // Three items: two left, one right.
+        let two = NotchSurfaceLayout(providerCount: 2, notchWidth: 185, housingRowHeight: 32)
+        #expect(two.leadingItemCount == 2)
+        #expect(two.trailingFlankWidth == two.chipWidth)
     }
 
-    @Test("minimized is the housing band alone")
+    @Test("a chip never shrinks below a legible width")
+    func minimumChipWidth() {
+        let squeezed = NotchSurfaceLayout(
+            providerCount: 3, notchWidth: 185, housingRowHeight: 32, chipWidth: 4
+        )
+        #expect(squeezed.chipWidth == squeezed.minimumChipWidth)
+    }
+
+    @Test("minimized drops the chips, leaving the housing band")
     func minimized() {
-        // Nothing below the housing row, which has no pixels: the screen is unobstructed.
         #expect(three.minimizedSize.height == 32)
         #expect(three.minimizedSize.width == 185)
-        #expect(three.minimizedSize.height < three.collapsedSize.height)
+        // Same height as resting; it is the width that collapses to the camera alone.
+        #expect(three.minimizedSize.width < three.collapsedSize.width)
     }
 
     @Test("hovering adds a snippet, not a panel")
     func snippetIsSmall() {
-        // A fixed, small addition: the point of hovering is a glance, not a dashboard.
         #expect(three.expandedBodyHeight == 52)     // 9 padding x2 + 34 snippet
         let grown = three.expandedSize.height - three.collapsedSize.height
         #expect(grown == three.expandedBodyHeight)
-        // The whole expanded surface stays shorter than the old card's body alone.
-        #expect(three.expandedSize.height < 140)
+        // Only hovering ever reaches below the menu bar, and only this far.
+        #expect(three.expandedSize.height == 84)
     }
 
     @Test("state selection covers all three forms")
@@ -332,10 +346,10 @@ struct NotchSurfaceLayoutTests {
             let layout = NotchSurfaceLayout(
                 providerCount: count, notchWidth: 185, housingRowHeight: 32
             )
-            #expect(layout.windowSize.width >= layout.collapsedSize.width)
-            #expect(layout.windowSize.width >= layout.expandedSize.width)
-            #expect(layout.windowSize.height >= layout.expandedSize.height)
-            #expect(layout.windowSize.height >= layout.minimizedSize.height)
+            for size in [layout.collapsedSize, layout.expandedSize, layout.minimizedSize] {
+                #expect(size.width <= layout.windowSize.width)
+                #expect(size.height <= layout.windowSize.height)
+            }
         }
     }
 }
