@@ -117,13 +117,26 @@ pass of the pointer fires it once instead of flickering while the pointer rests 
 
 ## Silhouette
 
-- Full width at the top, flaring inward through a **concave** curve. That hollow joins the
-  tab to the chrome above rather than sticking it on.
-- Generous bottom radii, larger when expanded.
-- Near-black rather than pure black, so the tab separates from the housing by a hair in
-  bright rooms while still reading as one object.
-- The tab draws its own shadow; the window has none, since a window shadow would trace the
-  full rectangle and give the game away.
+One shape spans the camera housing and the panel beneath it.
+
+The top section is the housing's own width and sits inside the notch row, where the display
+has no pixels — invisible, but it is what makes the outline continuous. At the housing's
+lower edge the outline necks in to the panel's width through a concave curve that mirrors
+the hardware's own shoulders, so the panel reads as the notch continuing downward.
+
+Three things had made it read as a separate pill stuck underneath:
+
+- **Its own rounded top corners**, meeting the housing's rounded bottom corners, which never
+  lined up. There is now a single outline with no join.
+- **A lighter fill.** The surface was near-black, chosen so it would separate from the
+  housing by a hair. On real hardware that hair is a visible seam: the housing is true
+  black, and anything lighter beside it looks like a different object. The fill is now pure
+  black.
+- **A hairline border**, which traced the panel's edge against the housing. Removed.
+
+The panel's bottom corners keep a generous radius, larger when expanded. The minimized
+mini-notch uses the same outline with a tiny body, so even tucked away it is part of the
+notch rather than a nub floating below it.
 
 ## Interaction
 

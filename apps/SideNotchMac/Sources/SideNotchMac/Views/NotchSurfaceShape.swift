@@ -1,62 +1,79 @@
 import SwiftUI
 
-/// The silhouette: a surface hanging from the top of the display that reads as the camera
-/// housing continuing downward.
+/// One silhouette spanning the camera housing and the panel beneath it.
 ///
-/// Three details do the work:
+/// The top section is the housing's own width and sits inside the notch row, where the
+/// display has no pixels — invisible, but it is what makes the shape continuous. At the
+/// housing's lower edge the outline necks in to the panel's width through a concave curve,
+/// mirroring the hardware's own shoulders, so the panel reads as the notch continuing
+/// downward instead of a separate pill hanging under it.
 ///
-/// - The very top spans the full width, then flares *inward* through a concave curve. That
-///   hollow is what makes the surface look joined to the bezel instead of stuck onto it.
-/// - The bottom corners carry a large radius, so the shape stays continuous rather than
-///   reading as a rounded rectangle.
-/// - Both corner families are quadratic curves with explicit control points. Arcs are
-///   ambiguous in SwiftUI's flipped coordinate space, and a `clockwise` flag guessed wrong
-///   silently produces a convex bulge.
+/// Drawing the panel as its own rounded rectangle is what made it look detached: it had its
+/// own top corners meeting the housing's bottom corners, and the two never lined up.
 struct NotchSurfaceShape: Shape {
-    var flare: CGFloat
+    /// Width of the physical housing.
+    var notchWidth: CGFloat
+    /// Height of the housing row.
+    var notchHeight: CGFloat
+    /// Width of the panel below the housing.
+    var bodyWidth: CGFloat
+    /// Radius of the panel's bottom corners.
     var bottomRadius: CGFloat
+    /// Radius of the neck where the housing meets the panel.
+    var shoulderRadius: CGFloat
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(flare, bottomRadius) }
-        set { flare = newValue.first; bottomRadius = newValue.second }
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat> {
+        get { AnimatablePair(AnimatablePair(bodyWidth, bottomRadius), shoulderRadius) }
+        set {
+            bodyWidth = newValue.first.first
+            bottomRadius = newValue.first.second
+            shoulderRadius = newValue.second
+        }
     }
 
     func path(in rect: CGRect) -> Path {
+        let centerX = rect.midX
+        let notchHalf = notchWidth / 2
+        let bodyHalf = max(bodyWidth, 1) / 2
+        let bodyBottom = rect.maxY
+        let bodyHeight = max(bodyBottom - notchHeight, 0)
+
+        let shoulder = min(shoulderRadius, bodyHeight / 2)
+        let radius = min(bottomRadius, bodyHalf, max(bodyHeight - shoulder, 0))
+
         var path = Path()
 
-        let flare = min(self.flare, rect.width / 4, rect.height / 2)
-        let bodyMinX = rect.minX + flare
-        let bodyMaxX = rect.maxX - flare
-        let radius = min(bottomRadius, (bodyMaxX - bodyMinX) / 2, rect.height - flare)
+        // Left edge of the housing, from the top of the display down to its lower edge.
+        path.move(to: CGPoint(x: centerX - notchHalf, y: rect.minY))
+        path.addLine(to: CGPoint(x: centerX - notchHalf, y: notchHeight))
 
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-
-        // Concave flare down into the body on the right.
+        // Neck in (or out) to the panel's width. The control point sits at the corner the
+        // two edges would otherwise meet in, which is what makes the join read as one
+        // continuous outline rather than two shapes touching.
         path.addQuadCurve(
-            to: CGPoint(x: bodyMaxX, y: rect.minY + flare),
-            control: CGPoint(x: bodyMaxX, y: rect.minY)
+            to: CGPoint(x: centerX - bodyHalf, y: notchHeight + shoulder),
+            control: CGPoint(x: centerX - bodyHalf, y: notchHeight)
         )
 
-        path.addLine(to: CGPoint(x: bodyMaxX, y: rect.maxY - radius))
+        path.addLine(to: CGPoint(x: centerX - bodyHalf, y: bodyBottom - radius))
         path.addQuadCurve(
-            to: CGPoint(x: bodyMaxX - radius, y: rect.maxY),
-            control: CGPoint(x: bodyMaxX, y: rect.maxY)
+            to: CGPoint(x: centerX - bodyHalf + radius, y: bodyBottom),
+            control: CGPoint(x: centerX - bodyHalf, y: bodyBottom)
         )
 
-        path.addLine(to: CGPoint(x: bodyMinX + radius, y: rect.maxY))
+        path.addLine(to: CGPoint(x: centerX + bodyHalf - radius, y: bodyBottom))
         path.addQuadCurve(
-            to: CGPoint(x: bodyMinX, y: rect.maxY - radius),
-            control: CGPoint(x: bodyMinX, y: rect.maxY)
+            to: CGPoint(x: centerX + bodyHalf, y: bodyBottom - radius),
+            control: CGPoint(x: centerX + bodyHalf, y: bodyBottom)
         )
 
-        path.addLine(to: CGPoint(x: bodyMinX, y: rect.minY + flare))
-        // Concave flare back out to the top edge on the left.
+        path.addLine(to: CGPoint(x: centerX + bodyHalf, y: notchHeight + shoulder))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.minY),
-            control: CGPoint(x: bodyMinX, y: rect.minY)
+            to: CGPoint(x: centerX + notchHalf, y: notchHeight),
+            control: CGPoint(x: centerX + bodyHalf, y: notchHeight)
         )
 
+        path.addLine(to: CGPoint(x: centerX + notchHalf, y: rect.minY))
         path.closeSubpath()
         return path
     }

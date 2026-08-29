@@ -10,8 +10,10 @@ enum Tokens {
     enum Surface {
         /// Outward flare where the tab meets the chrome above it.
         static let flare: CGFloat = 10
-        static let collapsedRadius: CGFloat = 15
-        static let expandedRadius: CGFloat = 20
+        static let collapsedRadius: CGFloat = 14
+        static let expandedRadius: CGFloat = 18
+        /// Radius of the neck where the housing meets the panel.
+        static let shoulderRadius: CGFloat = 10
 
         static let chipSpacing: CGFloat = 0
         static let bodyPadding: CGFloat = 14
@@ -28,10 +30,12 @@ enum Tokens {
     }
 
     enum Palette {
-        /// Near-black rather than pure black, so the tab separates from the housing by a
-        /// hair in bright rooms while still reading as one object.
-        static let surface = Color(red: 0.043, green: 0.043, blue: 0.047)
-        static let surfaceEdge = Color.white.opacity(0.07)
+        /// Pure black, matching the camera housing exactly.
+        ///
+        /// An earlier near-black was chosen so the panel would separate from the housing by
+        /// a hair. On real hardware that hair is a visible seam: the housing is true black,
+        /// and anything lighter beside it reads as a separate object stuck underneath.
+        static let surface = Color.black
         static let primaryText = Color.white
         static let secondaryText = Color(white: 0.60)
         static let tertiaryText = Color(white: 0.42)

@@ -45,35 +45,79 @@ struct NotchRootView: View {
         )
     }
 
+    /// Size of the panel below the housing, in the current state.
+    private var bodySize: CGSize { size }
+
+    /// The full silhouette: housing section plus the panel beneath it.
     private var shape: NotchSurfaceShape {
         NotchSurfaceShape(
-            flare: layout.flare,
-            bottomRadius: expanded ? Tokens.Surface.expandedRadius : Tokens.Surface.collapsedRadius
+            notchWidth: layout.notchWidth,
+            notchHeight: layout.surfaceTopInset,
+            bodyWidth: bodySize.width,
+            bottomRadius: expanded ? Tokens.Surface.expandedRadius : Tokens.Surface.collapsedRadius,
+            shoulderRadius: Tokens.Surface.shoulderRadius
         )
+    }
+
+    /// Width the silhouette needs: the wider of the housing and the panel.
+    private var surfaceWidth: CGFloat {
+        max(layout.notchWidth, bodySize.width)
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            hoverBand
-            if minimized {
-                miniNotch
-                    .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .top)))
-            } else {
-                surfaceBody
-                    .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
-            }
+            surfaceBody
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: minimized)
     }
 
-    /// The camera's own row. Nothing is drawn here — the camera has no pixels behind it —
-    /// but hovering it tucks the chips away, so the gesture stays on the notch itself.
+    /// The whole surface: one shape spanning the housing and the panel, with the content
+    /// laid out below the housing row.
+    private var surfaceBody: some View {
+        ZStack(alignment: .top) {
+            shape
+                .fill(Tokens.Palette.surface)
+                .shadow(color: .black.opacity(0.4), radius: expanded ? 12 : 5, y: expanded ? 5 : 2)
+
+            VStack(spacing: 0) {
+                housingHoverRegion
+                if !minimized {
+                    chipRow
+                    if expanded {
+                        snippet.transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+        }
+        .frame(
+            width: surfaceWidth,
+            height: layout.surfaceTopInset + bodySize.height,
+            alignment: .top
+        )
+        .clipShape(shape)
+        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
+        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: minimized)
+        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: bodySize.width)
+        .onHover { hovering in
+            // Leaving the surface collapses the snippet; a chip has to be hovered to open it.
+            guard !surface.isPinned, !hovering else { return }
+            withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
+                surface.isExpanded = false
+            }
+        }
+        .onTapGesture { togglePinned() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("SideNotch usage")
+    }
+
+    /// The housing's own row. Nothing visible is drawn here — the camera has no pixels
+    /// behind it — but hovering it tucks the chips away, and hovering it again brings them
+    /// back.
     ///
     /// Toggling on entry rather than continuously means one pass of the pointer fires it
     /// once instead of flickering while the pointer rests there.
-    private var hoverBand: some View {
+    private var housingHoverRegion: some View {
         Color.clear
             .frame(height: layout.surfaceTopInset)
             .contentShape(Rectangle())
@@ -86,56 +130,6 @@ struct NotchRootView: View {
             }
             .accessibilityLabel(minimized ? "Show SideNotch" : "Hide SideNotch")
             .accessibilityAddTraits(.isButton)
-    }
-
-    /// The mini-notch: what is left when the chips are tucked away.
-    ///
-    /// Small enough to ignore while working, and visible enough to aim at — drawing nothing
-    /// would leave the way back invisible, which is an affordance nobody can use. Hovering
-    /// it brings the group straight back.
-    private var miniNotch: some View {
-        Capsule()
-            .fill(Tokens.Palette.surface)
-            .frame(width: layout.miniNotchWidth, height: layout.miniNotchHeight)
-            .contentShape(Rectangle().inset(by: -6))   // a forgiving target for its size
-            .onHover { hovering in
-                guard hovering else { return }
-                withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                    surface.isMinimized = false
-                }
-            }
-            .accessibilityLabel("Show SideNotch")
-            .accessibilityAddTraits(.isButton)
-    }
-
-    /// The drawn surface: the chip group, and the snippet when a chip is hovered.
-    private var surfaceBody: some View {
-        VStack(spacing: 0) {
-            chipRow
-            if expanded {
-                snippet
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .frame(width: size.width, height: size.height, alignment: .top)
-        .background {
-            shape
-                .fill(Tokens.Palette.surface)
-                .overlay { shape.stroke(Tokens.Palette.surfaceEdge, lineWidth: 0.5) }
-                .shadow(color: .black.opacity(0.45), radius: expanded ? 14 : 6, y: expanded ? 6 : 3)
-        }
-        .clipShape(shape)
-        .animation(Tokens.Motion.surface(reduceMotion: reduceMotion), value: expanded)
-        .onHover { hovering in
-            // Leaving the group collapses the snippet; a chip has to be hovered to open it.
-            guard !surface.isPinned, !hovering else { return }
-            withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                surface.isExpanded = false
-            }
-        }
-        .onTapGesture { togglePinned() }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("SideNotch usage")
     }
 
     private func togglePinned() {
