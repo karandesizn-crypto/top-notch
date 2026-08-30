@@ -1,5 +1,12 @@
 # Phase 4 — Data Source Audit
 
+> **⚠️ Superseded for Claude and Cursor.** This audit concluded both were unsupported. That
+> conclusion tested the wrong question — "is there a documented API?" rather than "is there
+> a safe, reproducible mechanism?" — and both now have working adapters. See
+> `PROVIDER_INTEGRATIONS.md`. The Codex findings and the security sweep below still stand,
+> and the evidence here for *why the documented routes do not work* remains accurate and is
+> still the reason the integrations had to be unofficial.
+
 **Date:** 2026-08-30
 **Scope:** Every provider SideNotch ships or could ship. What data exists, whether it can
 be read legitimately, and whether it is safe to ship.

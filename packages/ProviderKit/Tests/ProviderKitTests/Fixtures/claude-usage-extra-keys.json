@@ -1,0 +1,6 @@
+{
+  "five_hour":       { "utilization": 10.0, "resets_at": "2026-08-30T18:00:00Z" },
+  "seven_day_cowork": { "utilization": 5.0, "resets_at": "2026-09-02T00:00:00Z" },
+  "extra_usage":     { "current_spending": 4.2, "budget_limit": 50 },
+  "rate_limit_tier": "max_20x"
+}

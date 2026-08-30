@@ -141,12 +141,28 @@ struct ProviderErrorTests {
         #expect(!error.userFacingDescription.contains("secret"))
     }
 
-    @Test("stub providers report unsupported with a reason")
-    func stubs() async {
-        for provider: any UsageProvider in [ClaudeUsageProvider(), CursorUsageProvider()] {
-            // Stubs report unsupported rather than throwing, so the UI can say why.
+    @Test("a signed-out provider reports unavailable with a reason, not a blank")
+    func signedOutProviders() async {
+        // These two adapters used to be stubs that always answered `.unsupported`. They
+        // are real integrations now, so the contract under test changed: with no usable
+        // credential they must still produce a state the UI can explain, and must reach
+        // that answer without touching the network.
+        let providers: [any UsageProvider] = [
+            ClaudeUsageProvider(
+                credentials: StubClaudeCredentials.failing(.authenticationRequired),
+                http: StubHTTPClient(.transport(detail: "must not be called")),
+                limiter: unthrottled()
+            ),
+            CursorUsageProvider(
+                credentials: StubCursorCredentials.failing(.authenticationRequired),
+                http: StubHTTPClient(.transport(detail: "must not be called")),
+                limiter: unthrottled()
+            ),
+        ]
+        for provider in providers {
             let state = try? await provider.fetchUsage()
-            #expect(state?.status == .unsupported)
+            #expect(state?.status == .unavailable)
+            #expect(state?.failure?.isEmpty == false)
         }
     }
 
@@ -234,11 +250,25 @@ struct ProviderStateContractTests {
         #expect(state.hasFigures)
     }
 
-    @Test("stubs produce UNSUPPORTED, never a fabricated reading")
-    func stubsAreUnsupported() async throws {
-        for provider: any UsageProvider in [ClaudeUsageProvider(), CursorUsageProvider()] {
+    @Test("a provider that cannot read produces NO figures, never a fabricated one")
+    func unreadableProvidersHaveNoFigures() async throws {
+        // The guarantee this test has always protected: the absence of data must surface
+        // as an absence. A zeroed ring would read as "you have used nothing", which is a
+        // different and much worse claim than "we could not tell".
+        let providers: [any UsageProvider] = [
+            ClaudeUsageProvider(
+                credentials: StubClaudeCredentials.failing(.authenticationRequired),
+                http: StubHTTPClient(.transport(detail: "must not be called")),
+                limiter: unthrottled()
+            ),
+            CursorUsageProvider(
+                credentials: StubCursorCredentials.failing(.notInstalled),
+                http: StubHTTPClient(.transport(detail: "must not be called")),
+                limiter: unthrottled()
+            ),
+        ]
+        for provider in providers {
             let state = try await provider.fetchUsage()
-            #expect(state.status == .unsupported)
             #expect(state.source == .unavailable)
             #expect(state.hasFigures == false)
             #expect(state.windows.isEmpty)

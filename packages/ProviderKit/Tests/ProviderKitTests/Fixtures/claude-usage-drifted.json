@@ -1,0 +1,4 @@
+{
+  "fiveHourWindow": { "pct": 50.0, "reset": "2026-08-30T18:00:00Z" },
+  "weeklyWindow":   { "pct": 20.0, "reset": "2026-09-02T00:00:00Z" }
+}

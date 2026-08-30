@@ -1,30 +1,139 @@
 import Foundation
 import SideNotchCore
 
-/// Cursor adapter — not implemented, because there is nothing local to read.
+/// Reads Cursor usage using the access token Cursor already stores on this machine.
 ///
-/// Cursor's global state database
-/// (`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`) was queried
-/// across both its tables for every `usage`, `quota`, `limit`, and `subscription` key and
-/// returned no usage rows; the only matches were cached file contents whose *filenames*
-/// contained those words. Cursor fetches these figures from its servers per session and
-/// does not persist them.
+/// ## What this talks to, and why
 ///
-/// The only known route is replaying Cursor's private endpoints with the user's session
-/// cookie, which the project rules exclude. Unlike Claude, there is not even a stale local
-/// cache to fall back on.
+/// `GET https://api2.cursor.sh/auth/usage`, with the bearer token read from
+/// `cursorAuth/accessToken` in Cursor's own `state.vscdb`. **Unofficial**: Cursor publishes
+/// no usage API and no CLI that prints quota. `cursor --status` reports process
+/// diagnostics — CPU, memory, PIDs — and nothing about entitlement.
 ///
-/// If Cursor ships a documented usage API or a CLI that prints quota, this becomes a
-/// drop-in replacement behind `UsageProvider` and nothing above it changes.
+/// ## The line this adapter does not cross
+///
+/// Cursor's web dashboard endpoints under `cursor.com/api/*` authenticate with a
+/// `WorkosCursorSessionToken` browser cookie. Several comparable tools synthesize that
+/// cookie by pasting the local JWT into the browser's cookie format, or read it out of
+/// Safari and Chrome cookie jars directly. **This adapter does neither.** Harvesting
+/// browser cookies is the scraping of authenticated sessions the project rules prohibit
+/// outright, and forging a session cookie impersonates the user's browser to a service
+/// that did not issue it one.
+///
+/// Presenting Cursor's own token to Cursor's own API is a different act: it is the same
+/// credential the editor uses, for the same purpose, over the same transport. That is the
+/// boundary — reuse the client's credential as a client, never reconstruct the browser's.
+///
+/// The cost of that line is real. The bearer endpoint reports the request-pool model; it
+/// does not carry the newer usage-based-pricing dollar figures the web dashboard shows. A
+/// partial honest reading is the right trade against a complete dishonest one.
+///
+/// ## Reliability
+///
+/// Lower than Claude's. The credential path is confirmed on this machine — the token is
+/// present, well-formed, and 424 bytes of JWT. The response schema is taken from several
+/// independent extensions that consume it, but has not been validated against a live
+/// account here, so `CursorUsageDecoder` fails closed: an unrecognised payload yields
+/// `.unavailable`, never a fabricated ring.
 public struct CursorUsageProvider: UsageProvider {
     public let providerType: ProviderType = .cursor
     public let displayName = "Cursor"
 
-    public init() {}
+    private let credentials: CursorCredentialReading
+    private let http: any UsageHTTPPerforming
+    private let limiter: EndpointRateLimiter
+    private let endpoint: URL
 
-    /// Reports unsupported rather than throwing: having no readable interface is a fact
-    /// about the provider, not a failure of this attempt, and the UI needs to say so.
+    public static let defaultEndpoint = URL(string: "https://api2.cursor.sh/auth/usage")!
+
+    public init(
+        credentials: CursorCredentialReading = CursorCredentialSource(),
+        http: any UsageHTTPPerforming = UsageHTTPClient(),
+        // Cursor has not been observed rate-limiting this endpoint, but a shared floor
+        // keeps a hover-storm from turning into a request storm against any provider.
+        limiter: EndpointRateLimiter = EndpointRateLimiter(minimumInterval: 120),
+        endpoint: URL = CursorUsageProvider.defaultEndpoint
+    ) {
+        self.credentials = credentials
+        self.http = http
+        self.limiter = limiter
+        self.endpoint = endpoint
+    }
+
     public func fetchUsage() async throws -> UsageState {
-        UsageState.unsupported(provider: providerType, reason: "Not exposed outside Cursor")
+        #if !os(macOS)
+        return UsageState.unsupported(provider: providerType, reason: "macOS only")
+        #else
+        let credential: CursorCredential
+        do {
+            credential = try credentials.read()
+        } catch let error as ProviderError {
+            return state(for: error)
+        }
+
+        guard !credential.isExpired() else {
+            // Cursor refreshes its own token when the editor next runs. We do not hold the
+            // refresh token and will not mint one.
+            return UsageState.unavailable(provider: providerType, reason: "Sign-in expired")
+        }
+
+        if let refusal = await limiter.claim() {
+            Log.provider.debug("Cursor usage read deferred: \(String(describing: refusal))")
+            return UsageState.unavailable(provider: providerType, reason: "Waiting to refresh")
+        }
+
+        let outcome = await http.get(
+            endpoint,
+            headers: [
+                "Authorization": "Bearer \(credential.accessToken.reveal())",
+                "Accept": "application/json",
+                "User-Agent": ClaudeUsageProvider.userAgent,
+            ]
+        )
+
+        switch outcome {
+        case .success(let data):
+            await limiter.recordSuccess()
+            let response = try CursorUsageDecoder.decode(data)
+            if !response.unknownKeys.isEmpty {
+                Log.provider.notice(
+                    "Cursor usage schema drift: unrecognised keys \(response.unknownKeys.joined(separator: ","), privacy: .public)"
+                )
+            }
+            return CursorUsageMapper.snapshot(from: response)
+
+        case .unauthorized:
+            return UsageState.unavailable(provider: providerType, reason: "Sign in to Cursor")
+
+        case .rateLimited(let retryAfter):
+            await limiter.recordRateLimited(retryAfter: retryAfter)
+            return UsageState.unavailable(provider: providerType, reason: "Rate limited")
+
+        case .http(let status):
+            await limiter.recordTransportFailure()
+            Log.provider.error("Cursor usage HTTP \(status)")
+            return UsageState.unavailable(provider: providerType, reason: "Service unavailable")
+
+        case .transport(let detail):
+            await limiter.recordTransportFailure()
+            Log.provider.debug("Cursor usage transport failure: \(detail, privacy: .public)")
+            return UsageState.unavailable(provider: providerType, reason: detail)
+        }
+        #endif
+    }
+
+    private func state(for error: ProviderError) -> UsageState {
+        switch error {
+        case .notInstalled:
+            UsageState.unavailable(provider: providerType, reason: "Cursor not installed")
+        case .authenticationRequired:
+            UsageState.unavailable(provider: providerType, reason: "Sign in to Cursor")
+        case .unsupported(let reason):
+            UsageState.unsupported(provider: providerType, reason: reason)
+        default:
+            UsageState.unavailable(
+                provider: providerType, reason: error.userFacingDescription
+            )
+        }
     }
 }
