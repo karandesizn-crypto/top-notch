@@ -54,7 +54,8 @@ struct NotchRootView: View {
 
     private var size: CGSize {
         SurfaceSizing.size(
-            layout: layout, expanded: expanded, minimized: minimized, pinned: surface.isPinned
+            layout: layout, expanded: expanded, minimized: minimized,
+            pinned: surface.isPinned, rows: breakdownWindows.count
         )
     }
 
@@ -276,22 +277,22 @@ struct NotchRootView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
                 ProviderLogo(provider: surface.selected, size: 10)
-                Text(snippetTitle)
+                Text(surface.isPinned ? breakdownTitle : snippetTitle)
                     .font(Tokens.Type_.rowLabel)
                     .foregroundStyle(Tokens.Palette.primaryText)
                     .lineLimit(1)
             }
-            Text(snippetDetail)
-                .font(Tokens.Type_.rowMeta)
-                .foregroundStyle(Tokens.Palette.secondaryText)
-                .lineLimit(1)
 
-            if surface.isPinned, let extra = pinnedDetail {
-                Text(extra)
+            if surface.isPinned {
+                // The detail line is deliberately dropped here: it says exactly what the
+                // first breakdown row says, and repeating it wastes the panel's height on
+                // the one provider that has the most to show.
+                breakdown.transition(.opacity)
+            } else {
+                Text(snippetDetail)
                     .font(Tokens.Type_.rowMeta)
-                    .foregroundStyle(Tokens.Palette.tertiaryText)
+                    .foregroundStyle(Tokens.Palette.secondaryText)
                     .lineLimit(1)
-                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -299,12 +300,103 @@ struct NotchRootView: View {
         .padding(.vertical, layout.bodyVerticalPadding)
         .frame(
             width: size.width,
-            height: layout.expandedBodyHeight(pinned: surface.isPinned),
+            height: layout.expandedBodyHeight(
+                pinned: surface.isPinned, rows: breakdownWindows.count
+            ),
             alignment: .leading
         )
     }
 
-    /// The extra line a click earns: plan, the other window, credits, tokens today.
+    /// Every limit the provider reports, one row each, revealed by a click.
+    ///
+    /// Hovering answers "how close am I?" for the window that bites first. Clicking asks
+    /// the fuller question, and a provider with several limits has several answers — a
+    /// 41% weekly under a 93% session is a different situation from both being at 93%, and
+    /// one line cannot say so.
+    ///
+    /// A bar rather than a second ring: bars stack and compare down a column, which is the
+    /// whole point when there is more than one. Colour comes from the shared
+    /// `UsageThresholds` via the same `ProviderDisplayState` the rings use, so a row and
+    /// its ring can never disagree.
+    private var breakdown: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(breakdownWindows, id: \.id) { window in
+                breakdownRow(window)
+            }
+        }
+        .padding(.top, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Windows worth drawing: those that actually carry a measurement.
+    ///
+    /// A window with no figure has no bar to draw and no percentage to state, so it is
+    /// omitted rather than shown as an empty track — an empty bar reads as "zero used",
+    /// which is a claim we do not have.
+    private var breakdownWindows: [UsageWindow] {
+        guard let usage = status?.usage else { return [] }
+        return Array(
+            usage.windows
+                .filter { $0.usedFraction != nil }
+                .prefix(NotchSurfaceLayout.maximumPinnedRows)
+        )
+    }
+
+    private func breakdownRow(_ window: UsageWindow) -> some View {
+        let fraction = window.usedFraction ?? 0
+        let state = ProviderDisplayState(status: .available, level: window.level)
+        let tint = Tokens.Palette.color(for: state)
+
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(window.label)
+                    .font(Tokens.Type_.rowMeta)
+                    .foregroundStyle(Tokens.Palette.secondaryText)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+
+                if settings.showResetCountdown,
+                   let term = ResetCalculator.resetTerm(
+                       to: window.resetDate, from: manager.now
+                   ) {
+                    Text(term)
+                        .font(Tokens.Type_.rowMeta)
+                        .foregroundStyle(Tokens.Palette.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 2)
+
+                Text("\(Int((fraction * 100).rounded()))%")
+                    .font(Tokens.Type_.chipValue)
+                    .foregroundStyle(tint)
+                    .monospacedDigit()
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Tokens.Palette.track)
+                    Capsule()
+                        .fill(tint)
+                        // Clamped so an overage reading cannot draw past the track.
+                        .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+                }
+            }
+            .frame(height: 3)
+        }
+        .frame(height: layout.pinnedRowHeight, alignment: .top)
+    }
+
+    /// Names the provider and its plan, the way the provider states it.
+    private var breakdownTitle: String {
+        let name = settings.displayName(for: surface.selected)
+        guard let plan = status?.usage.plan, !plan.isEmpty else { return name }
+        return "\(name) · \(plan.capitalized)"
+    }
+
+    /// Extras a click earns that are not limits: credits, tokens today.
     ///
     /// Only what the provider actually reported — an absent field is omitted rather than
     /// shown empty, so this line is short or missing entirely for a sparse provider.

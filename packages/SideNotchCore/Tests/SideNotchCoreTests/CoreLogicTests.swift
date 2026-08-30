@@ -68,6 +68,35 @@ struct ResetCalculatorTests {
     }
 }
 
+@Suite("Reset term, for columns")
+struct ResetTermTests {
+    private let now = Date(timeIntervalSince1970: 1_788_000_000)
+
+    @Test("the term carries no leading verb")
+    func noVerb() {
+        // The column heading already says these are resets. Repeating "resets in" on every
+        // row is what made the 185pt panel truncate mid-word.
+        let soon = ResetCalculator.resetTerm(to: now.addingTimeInterval(7_260), from: now)
+        #expect(soon == "2h 1m")
+        #expect(soon?.contains("resets") == false)
+    }
+
+    @Test("beyond a day it names the day rather than counting hours")
+    func namesTheDay() {
+        let term = ResetCalculator.resetTerm(to: now.addingTimeInterval(3 * 86_400), from: now)
+        let phrase = ResetCalculator.compactResetPhrase(to: now.addingTimeInterval(3 * 86_400), from: now)
+        // Same day, stated without the verb the phrase form uses.
+        #expect(term != nil)
+        #expect(phrase?.hasSuffix(term ?? "|") == true)
+    }
+
+    @Test("an elapsed reset says now, and no reset says nothing")
+    func edges() {
+        #expect(ResetCalculator.resetTerm(to: now.addingTimeInterval(-60), from: now) == "now")
+        #expect(ResetCalculator.resetTerm(to: nil, from: now) == nil)
+    }
+}
+
 @Suite("Compact reset phrasing")
 struct CompactResetTests {
     let now = Date(timeIntervalSince1970: 1_700_000_000)

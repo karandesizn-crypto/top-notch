@@ -186,11 +186,35 @@ struct NotchSurfaceLayoutTests {
         #expect(three.expandedSize(pinned: true).width == three.notchWidth)
     }
 
-    @Test("clicking adds one line, not a panel")
-    func pinnedAddsOneLine() {
-        let grown = three.expandedBodyHeight(pinned: true)
-            - three.expandedBodyHeight(pinned: false)
-        #expect(grown == three.pinnedExtraHeight)
+    @Test("clicking grows the panel by a title plus one row per limit")
+    func pinnedGrowsByRow() {
+        let hover = three.expandedBodyHeight(pinned: false)
+
+        // A provider with no measurable window still gets its title line, and nothing more.
+        #expect(three.expandedBodyHeight(pinned: true, rows: 0) - hover == three.pinnedTitleHeight)
+
+        // Each additional limit adds exactly one row, so two limits are visibly taller than
+        // one — which is the whole reason the breakdown exists.
+        let one = three.expandedBodyHeight(pinned: true, rows: 1)
+        let two = three.expandedBodyHeight(pinned: true, rows: 2)
+        #expect(two - one == three.pinnedRowHeight)
+        #expect(one - hover == three.pinnedTitleHeight + three.pinnedRowHeight)
+    }
+
+    @Test("the breakdown is bounded, so one provider cannot grow the panel without limit")
+    func pinnedRowsAreCapped() {
+        let capped = three.expandedBodyHeight(pinned: true, rows: NotchSurfaceLayout.maximumPinnedRows)
+        let beyond = three.expandedBodyHeight(pinned: true, rows: 99)
+        #expect(beyond == capped)
+    }
+
+    @Test("the window is sized for the tallest breakdown, so pinning never resizes it")
+    func windowFitsTheTallestState() {
+        // Expanding has to be a pure SwiftUI animation. If the window had to grow when the
+        // panel did, the growth would lag the content by a frame and read as a stutter.
+        let tallest = three.surfaceTopInset
+            + three.expandedSize(pinned: true, rows: NotchSurfaceLayout.maximumPinnedRows).height
+        #expect(three.windowSize.height >= tallest)
     }
 
     @Test("state selection covers every form")

@@ -54,6 +54,27 @@ public enum ResetCalculator {
     /// Drops the time of day beyond a day out: "resets Sep 29, 1:38 AM" does not fit in
     /// 185pt beside a percentage, and the hour is not what someone glancing at a monthly
     /// window needs. Within a day the countdown is the useful part, so it stays.
+    /// Just the term — "2h 2m", "Thu", "Mar 3" — with no leading verb.
+    ///
+    /// The phrase forms read as sentences, which is right in a snippet and wrong in a
+    /// column: there the heading already establishes that these are resets, and repeating
+    /// "resets in" on every row spends width the 185pt panel does not have. Dropping it is
+    /// the difference between "resets in 2h…" truncated and "2h 2m" whole.
+    public static func resetTerm(
+        to resetAt: Date?, from now: Date = Date(), calendar: Calendar = .current
+    ) -> String? {
+        guard let resetAt else { return nil }
+        let remaining = resetAt.timeIntervalSince(now)
+        guard remaining > 0 else { return "now" }
+        if remaining < 86400 { return countdown(to: resetAt, from: now) }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate(remaining < 7 * 86400 ? "EEE" : "MMMd")
+        return formatter.string(from: resetAt)
+    }
+
     public static func compactResetPhrase(
         to resetAt: Date?, from now: Date = Date(), calendar: Calendar = .current
     ) -> String? {

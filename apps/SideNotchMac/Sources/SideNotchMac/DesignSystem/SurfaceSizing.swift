@@ -25,8 +25,9 @@ enum SurfaceSizing {
     }
 
     static func size(
-        layout: NotchSurfaceLayout, expanded: Bool, minimized: Bool, pinned: Bool
+        layout: NotchSurfaceLayout, expanded: Bool, minimized: Bool, pinned: Bool,
+        rows: Int = 0
     ) -> CGSize {
-        layout.size(expanded: expanded, minimized: minimized, pinned: pinned)
+        layout.size(expanded: expanded, minimized: minimized, pinned: pinned, rows: rows)
     }
 }

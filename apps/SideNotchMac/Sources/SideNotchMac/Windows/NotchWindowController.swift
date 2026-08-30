@@ -63,9 +63,13 @@ final class NotchWindowController {
                 width: windowSize.width, height: layout.surfaceTopInset
             )
 
+            // Pinned uses the maximum row count rather than the live one: the hit region
+            // only needs to be big enough, and tracking the exact number here would mean
+            // duplicating the view's filtering of measurable windows.
             let size = SurfaceSizing.size(
                 layout: layout, expanded: surface.isExpanded,
-                minimized: surface.isMinimized, pinned: surface.isPinned
+                minimized: surface.isMinimized, pinned: surface.isPinned,
+                rows: surface.isPinned ? NotchSurfaceLayout.maximumPinnedRows : 0
             )
             guard size.height > 0 else { return [band] }
 

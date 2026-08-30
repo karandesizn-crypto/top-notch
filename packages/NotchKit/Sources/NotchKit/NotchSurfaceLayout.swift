@@ -35,8 +35,10 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     public let flare: CGFloat
     /// Height of the two-line snippet shown on hover.
     public let snippetHeight: CGFloat
-    /// Extra height for the third line a click adds.
-    public let pinnedExtraHeight: CGFloat
+    /// Height of one window row in the pinned breakdown: its label line plus its bar.
+    public let pinnedRowHeight: CGFloat
+    /// Height of the breakdown's own title line.
+    public let pinnedTitleHeight: CGFloat
     /// The mini-notch: a small nub left behind when the chips are tucked away.
     public let miniNotchWidth: CGFloat
     public let miniNotchHeight: CGFloat
@@ -52,7 +54,8 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         horizontalPadding: CGFloat = 8,
         flare: CGFloat = 12,
         snippetHeight: CGFloat = 34,
-        pinnedExtraHeight: CGFloat = 15,
+        pinnedRowHeight: CGFloat = 22,
+        pinnedTitleHeight: CGFloat = 2,
         miniNotchWidth: CGFloat = 38,
         miniNotchHeight: CGFloat = 5,
         bodyVerticalPadding: CGFloat = 9
@@ -65,7 +68,8 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         self.horizontalPadding = horizontalPadding
         self.flare = flare
         self.snippetHeight = snippetHeight
-        self.pinnedExtraHeight = pinnedExtraHeight
+        self.pinnedRowHeight = pinnedRowHeight
+        self.pinnedTitleHeight = pinnedTitleHeight
         self.miniNotchWidth = miniNotchWidth
         self.miniNotchHeight = miniNotchHeight
         self.bodyVerticalPadding = bodyVerticalPadding
@@ -119,8 +123,18 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     /// Small either way: hovering shows the window that matters and when it resets, not a
     /// full panel. Clicking adds one line, because a deliberate click asks for a little
     /// more than a passing glance does.
-    public func expandedBodyHeight(pinned: Bool) -> CGFloat {
-        bodyVerticalPadding * 2 + snippetHeight + (pinned ? pinnedExtraHeight : 0)
+    /// The most window rows the breakdown will ever draw.
+    ///
+    /// The window is sized once for the tallest reachable state, so a provider with four
+    /// windows does not force a window resize mid-animation. Claude reports the most —
+    /// session, weekly, and per-model weeklies — and four covers it.
+    public static let maximumPinnedRows = 4
+
+    public func expandedBodyHeight(pinned: Bool, rows: Int = 0) -> CGFloat {
+        let breakdown = pinned
+            ? pinnedTitleHeight + CGFloat(min(max(rows, 0), Self.maximumPinnedRows)) * pinnedRowHeight
+            : 0
+        return bodyVerticalPadding * 2 + snippetHeight + breakdown
     }
 
     /// Expanding grows the panel downward only.
@@ -128,26 +142,28 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
     /// Its width stays the resting width — the housing's — because a panel wider than the
     /// housing has to flare outward from it, and that overhang is what makes the surface
     /// look stuck on rather than part of the notch.
-    public func expandedSize(pinned: Bool) -> CGSize {
+    public func expandedSize(pinned: Bool, rows: Int = 0) -> CGSize {
         CGSize(
             width: collapsedSize.width,
-            height: collapsedSize.height + expandedBodyHeight(pinned: pinned)
+            height: collapsedSize.height + expandedBodyHeight(pinned: pinned, rows: rows)
         )
     }
 
-    public func size(expanded: Bool, minimized: Bool, pinned: Bool) -> CGSize {
+    public func size(expanded: Bool, minimized: Bool, pinned: Bool, rows: Int = 0) -> CGSize {
         if minimized { return minimizedSize }
-        return expanded ? expandedSize(pinned: pinned) : collapsedSize
+        return expanded ? expandedSize(pinned: pinned, rows: rows) : collapsedSize
     }
 
     /// Window size: wide and tall enough for every reachable state, so expanding is purely
     /// a SwiftUI animation with no window resize.
     public var windowSize: CGSize {
-        let widest = max(expandedSize(pinned: true).width, collapsedSize.width)
+        let widest = max(expandedSize(pinned: true, rows: Self.maximumPinnedRows).width,
+                         collapsedSize.width)
         return CGSize(
             // At least the housing's width, so the hover band covers the whole camera.
             width: max(widest, notchWidth),
-            height: surfaceTopInset + expandedSize(pinned: true).height
+            height: surfaceTopInset
+                + expandedSize(pinned: true, rows: Self.maximumPinnedRows).height
         )
     }
 }
