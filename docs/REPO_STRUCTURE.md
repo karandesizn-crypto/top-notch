@@ -1,7 +1,7 @@
 # Repository Structure
 
 ```text
-SideNotch/
+Top Notch/
 ├── apps/
 │   ├── SideNotchMac/
 │   │   ├── App/
@@ -11,12 +11,12 @@ SideNotch/
 │   │   ├── Resources/
 │   │   └── SideNotchMac.xcodeproj
 │   │
-│   └── SideNotchIOS/
+│   └── Top NotchIOS/
 │       ├── App/
 │       ├── Views/
 │       ├── Widgets/
 │       ├── LiveActivity/
-│       └── SideNotchIOS.xcodeproj
+│       └── Top NotchIOS.xcodeproj
 │
 ├── packages/
 │   ├── SideNotchCore/

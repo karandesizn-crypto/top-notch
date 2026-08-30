@@ -2,7 +2,7 @@
 
 ```text
                  ┌─────────────────────────────┐
-                 │        SideNotch Mac        │
+                 │        Top Notch Mac        │
                  │  Side rail / detail card   │
                  └──────────────┬──────────────┘
                                 │

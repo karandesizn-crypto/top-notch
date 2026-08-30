@@ -19,7 +19,7 @@ ring size, but they are not the real trademarks and should not be presented as s
 Drop files here and they override the drawn marks with no code change:
 
 ```
-~/Library/Application Support/SideNotch/Logos/<provider-id>.png
+~/Library/Application Support/Top Notch/Logos/<provider-id>.png
 ```
 
 `png`, `pdf`, and `svg` are all accepted, in that order of preference. Filenames use the
@@ -44,7 +44,7 @@ identification and prohibit implying endorsement. The practical checklist:
 
 - Use each vendor's official artwork rather than an approximation.
 - Do not modify proportions or colour beyond what a monochrome treatment requires.
-- Do not imply the vendors endorse or are affiliated with SideNotch.
+- Do not imply the vendors endorse or are affiliated with Top Notch.
 - Read each brand guideline — Anthropic, OpenAI, and Anysphere each publish one.
 
 Falling back to the SF Symbols this replaced is a one-line change if the answer is no.

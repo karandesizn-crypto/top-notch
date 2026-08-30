@@ -95,7 +95,7 @@ public struct UsageState: Codable, Sendable, Identifiable, Equatable {
         )
     }
 
-    /// The provider has no interface SideNotch can legitimately read. Retrying will not
+    /// The provider has no interface Top Notch can legitimately read. Retrying will not
     /// help, so this is deliberately distinct from `.unavailable`.
     public static func unsupported(
         provider: ProviderType, reason: String, at date: Date = Date()

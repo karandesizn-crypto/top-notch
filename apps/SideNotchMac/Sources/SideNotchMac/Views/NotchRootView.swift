@@ -121,7 +121,7 @@ struct NotchRootView: View {
         }
         .onTapGesture { togglePinned() }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("SideNotch usage")
+        .accessibilityLabel("Top Notch usage")
     }
 
     /// The housing's own row. Nothing visible is drawn here — the camera has no pixels
@@ -141,7 +141,7 @@ struct NotchRootView: View {
                     if surface.isMinimized { surface.isExpanded = false }
                 }
             }
-            .accessibilityLabel(minimized ? "Show SideNotch" : "Hide SideNotch")
+            .accessibilityLabel(minimized ? "Show Top Notch" : "Hide Top Notch")
             .accessibilityAddTraits(.isButton)
     }
 

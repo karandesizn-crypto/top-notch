@@ -2,7 +2,7 @@ import Foundation
 
 /// Identifies a provider.
 ///
-/// A string wrapper rather than an enum, so a user can add a tool SideNotch has never heard
+/// A string wrapper rather than an enum, so a user can add a tool Top Notch has never heard
 /// of — Antigravity, an internal gateway, whatever — without a code change. Built-ins are
 /// static constants, which keeps `.codex` reading exactly as it did when this was an enum.
 public struct ProviderType: RawRepresentable, Codable, Hashable, Sendable, Identifiable {

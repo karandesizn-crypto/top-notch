@@ -76,7 +76,7 @@ struct RateLimitResetCreditDTO: Decodable {
 /// Token totals for the account.
 ///
 /// Deliberately *not* a context window: that is per-thread state, reported through
-/// `thread/tokenUsage/updated` for a conversation the client owns. SideNotch owns no
+/// `thread/tokenUsage/updated` for a conversation the client owns. Top Notch owns no
 /// thread, so no context-window figure is available to it and none is invented.
 struct GetAccountTokenUsageResponse: Decodable {
     let summary: TokenUsageSummaryDTO?

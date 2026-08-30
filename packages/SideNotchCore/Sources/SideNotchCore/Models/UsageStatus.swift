@@ -12,7 +12,7 @@ public enum UsageStatus: String, Codable, Sendable, CaseIterable {
     /// The provider is present but could not answer right now — not signed in, not
     /// running, a transient failure. Worth retrying.
     case unavailable
-    /// The provider has no interface SideNotch can legitimately read. Retrying will not
+    /// The provider has no interface Top Notch can legitimately read. Retrying will not
     /// help; this is a statement about the provider, not about this attempt.
     case unsupported
     /// The read failed in a way that is neither transient nor structural.

@@ -63,7 +63,7 @@ so they cannot yield a percentage without inventing one.
 
 **Status: shipped, live.** See `docs/CODEX_INTEGRATION.md` for the full contract.
 
-SideNotch now reads Codex through its **app-server** — the supported local JSON-RPC
+Top Notch now reads Codex through its **app-server** — the supported local JSON-RPC
 interface — calling `account/rateLimits/read` and subscribing to
 `account/rateLimits/updated`. That is strictly better than parsing rollout logs: it is a
 supported surface rather than an implementation detail, it returns the current value rather

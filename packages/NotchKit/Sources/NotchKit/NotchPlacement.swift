@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-/// What SideNotch needs to know about one display.
+/// What Top Notch needs to know about one display.
 ///
 /// A plain value rather than an `NSScreen`, so placement can be computed and tested for
 /// displays that are not attached — notched built-ins, external monitors at negative
@@ -127,7 +127,7 @@ public enum NotchPlacement {
 
     /// Picks the display the surface belongs on.
     ///
-    /// A notched display wins over the focused one. SideNotch is a notch tool: on a display
+    /// A notched display wins over the focused one. Top Notch is a notch tool: on a display
     /// without a housing it has nothing to attach to and just floats over whatever window
     /// is at the top edge, which reads as a bug. Preferring the built-in screen also means
     /// the surface stays put while the user works on an external monitor.

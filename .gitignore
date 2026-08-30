@@ -1,6 +1,18 @@
+# Build products
 .build/
+build/
 DerivedData/
+*.dSYM/
+
+# Xcode / SwiftPM local state
 *.xcuserstate
 *.xcuserdatad/
-.DS_Store
 .swiftpm/
+
+# Release artifacts — produced by scripts/release.sh, never committed
+dist/
+*.dmg
+*.zip
+
+# macOS
+.DS_Store

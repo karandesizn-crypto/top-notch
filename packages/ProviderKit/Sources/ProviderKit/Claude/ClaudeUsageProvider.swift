@@ -201,7 +201,7 @@ public struct ClaudeUsageProvider: UsageProvider {
     }
 
     /// Client identifier sent with every request.
-    static let userAgent = "SideNotch/1.0 (macOS; usage-monitor)"
+    static let userAgent = "TopNotch/1.0 (macOS; usage-monitor)"
 
     /// Maps a credential-read failure onto the state the UI should show.
     ///

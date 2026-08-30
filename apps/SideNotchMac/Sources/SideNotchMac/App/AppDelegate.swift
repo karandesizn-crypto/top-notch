@@ -25,14 +25,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings = AppSettings()
         notifications = NotificationService()
 
-        let usingMocks = ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1"
-        // Fixture runs get an in-memory cache. Sharing the real one let a mock render
-        // write figures that then outlived it, because a provider whose fetch fails keeps
+        // Fixture mode is debug-only, and the whole branch is compiled out of release
+        // rather than left behind a `false` flag: a dead ternary emits "will never be
+        // executed" on every release build, and warnings that are expected are warnings
+        // nobody reads. A shipped build has no code path to fixture data at all.
+        //
+        // Fixture runs get an in-memory cache. Sharing the real one let a mock render write
+        // figures that then outlived it, because a provider whose fetch fails keeps
         // whatever the cache last held.
-        let cache: any UsageCaching = usingMocks ? InMemoryUsageCache() : FileUsageCache()
-
-        let providerOverride: [any UsageProvider]? =
-            usingMocks ? MockUsageProvider.showcase() : nil
+        let cache: any UsageCaching
+        let providerOverride: [any UsageProvider]?
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1" {
+            cache = InMemoryUsageCache()
+            providerOverride = MockUsageProvider.showcase()
+        } else {
+            cache = FileUsageCache()
+            providerOverride = nil
+        }
+        #else
+        cache = FileUsageCache()
+        providerOverride = nil
+        #endif
 
         manager = UsageManager(
             settings: settings, cache: cache, notifications: notifications,
@@ -53,10 +67,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.show()
         installStatusItem()
 
-        Task {
-            await notifications.requestAuthorization()
-            await manager.start()
-        }
+        // Two independent tasks, deliberately not one sequential one.
+        //
+        // These were chained, which put an optional permission prompt in front of the
+        // product's only job. `requestAuthorization` does not return until the user answers
+        // the system dialog — so ignoring that dialog, or any stall in it, left the rail
+        // permanently empty with the app running and apparently healthy. Reading usage must
+        // not wait on permission to *notify* about usage.
+        Task { await manager.start() }
+        Task { await notifications.requestAuthorization() }
 
         observeWake()
     }
@@ -82,8 +101,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let manager = self?.manager else { return }
-            Task { await manager.refreshAll(trigger: .wake) }
+            // The observer block is `Sendable`, so reaching `self.manager` — which is
+            // main-actor isolated — has to happen inside a main-actor context rather than
+            // in the block itself, even though the block is already delivered on `.main`.
+            // `queue: .main` is a delivery guarantee the compiler cannot see.
+            Task { @MainActor in
+                guard let manager = self?.manager else { return }
+                await manager.refreshAll(trigger: .wake)
+            }
         }
     }
 
@@ -93,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(
             systemSymbolName: "gauge.with.dots.needle.33percent",
-            accessibilityDescription: "SideNotch"
+            accessibilityDescription: "Top Notch"
         )
 
         let menu = NSMenu()
@@ -103,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit SideNotch", action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Top Notch", action: #selector(quit), keyEquivalent: "q")
             .target = self
         item.menu = menu
         statusItem = item
@@ -135,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false
         )
-        window.title = "SideNotch Settings"
+        window.title = "Top Notch Settings"
         window.contentView = NSHostingView(rootView: view)
         window.isReleasedWhenClosed = false
         window.center()
@@ -180,6 +205,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// without screen-recording permission. Returns true when the app should not continue
     /// to normal startup.
     private func handleDiagnosticModes() -> Bool {
+        // The whole diagnostic surface is debug-only. These modes exist to verify the
+        // design lock and window geometry offscreen, which is a development and CI job;
+        // a release build has no business honouring them, and stripping them removes the
+        // only paths that terminate the app from an environment variable.
+        #if !DEBUG
+        return false
+        #else
         let environment = ProcessInfo.processInfo.environment
 
         if let path = environment["SIDENOTCH_RENDER"] {
@@ -205,5 +237,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return false
+        #endif
     }
 }

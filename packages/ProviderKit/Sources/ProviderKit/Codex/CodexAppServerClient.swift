@@ -4,7 +4,7 @@ import SideNotchCore
 /// A JSON-RPC client for `codex app-server`, spoken over the child process's stdio.
 ///
 /// The app-server is Codex's own supported integration surface — the same one its editor
-/// extensions use — so SideNotch never touches `~/.codex/auth.json`, never handles OAuth
+/// extensions use — so Top Notch never touches `~/.codex/auth.json`, never handles OAuth
 /// tokens, and never calls a provider web endpoint directly. Authentication is entirely
 /// the app-server's business.
 ///
@@ -50,7 +50,7 @@ actor CodexAppServerClient {
     private let clientVersion: String
     private let requestTimeout: TimeInterval
 
-    init(clientName: String = "SideNotch", clientVersion: String = "1.0.0", requestTimeout: TimeInterval = 15) {
+    init(clientName: String = "TopNotch", clientVersion: String = "1.0.0", requestTimeout: TimeInterval = 15) {
         self.clientName = clientName
         self.clientVersion = clientVersion
         self.requestTimeout = requestTimeout

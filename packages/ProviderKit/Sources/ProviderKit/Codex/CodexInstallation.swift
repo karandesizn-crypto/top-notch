@@ -35,7 +35,7 @@ public enum CodexInstallation {
     /// Whether Codex has been signed in on this machine.
     ///
     /// Only the *existence* of the auth file is checked. It is never opened, parsed, or
-    /// copied — SideNotch has no business reading the user's tokens, and the app-server
+    /// copied — Top Notch has no business reading the user's tokens, and the app-server
     /// handles authentication itself.
     public static func hasStoredAuth(fileManager: FileManager = .default) -> Bool {
         fileManager.fileExists(atPath: homeDirectory.appendingPathComponent("auth.json").path)

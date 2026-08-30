@@ -1,4 +1,4 @@
-# SideNotch — Product + Engineering Scaffold
+# Top Notch — Product + Engineering Scaffold
 
 A local-first macOS utility for glanceable AI coding-tool usage, with an iOS companion.
 

@@ -67,7 +67,7 @@ public protocol UsageHTTPPerforming: Sendable {
     func post(_ url: URL, headers: [String: String], body: Data) async -> HTTPOutcome
 }
 
-/// The single place in SideNotch that touches the network.
+/// The single place in Top Notch that touches the network.
 ///
 /// Configured to be forgetful. The session is ephemeral, cookie handling is off, and the
 /// URL cache is nil, so no credential-bearing request can leave a trace in the shared

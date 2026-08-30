@@ -1,6 +1,6 @@
 # Mac UX
 
-SideNotch is a **top-notch** surface: a compact tab hanging below the camera housing at the
+Top Notch is a **top-notch** surface: a compact tab hanging below the camera housing at the
 top centre of the display.
 
 Superseded twice. The first draft was a right-edge side rail. The second straddled the

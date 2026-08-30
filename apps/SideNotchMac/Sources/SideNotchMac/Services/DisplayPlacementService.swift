@@ -24,6 +24,12 @@ final class DisplayPlacementService {
 
     /// Only ever mutated on the main actor; declared nonisolated so `deinit` can unhook
     /// the observers, which block-based observers do not do for themselves.
+    ///
+    /// `@ObservationIgnored` because this is internal bookkeeping, not state any view
+    /// reads. Without it the `@Observable` macro wraps the property, and the wrapper is
+    /// what made `nonisolated(unsafe)` "have no effect" — the annotation landed on the
+    /// macro's accessor rather than on the storage.
+    @ObservationIgnored
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
     /// Whether displays without a housing are acceptable. Supplied by settings.

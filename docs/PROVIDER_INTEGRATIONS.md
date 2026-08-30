@@ -354,7 +354,7 @@ Two things worth recording for next time:
 - **`--max-budget-usd 0.01` is refused before the call is made.** The budget is checked
   against an estimated ceiling, not actual spend, so too tight a cap fails closed and
   refreshes nothing.
-- **Nothing in SideNotch does this.** It remains a manual remediation. Spawning a vendor
+- **Nothing in Top Notch does this.** It remains a manual remediation. Spawning a vendor
   CLI on a timer is a side effect a usage monitor should not have, and the adapter's rule —
   never renew a credential it did not issue — is what keeps it from revoking the user's CLI
   session.

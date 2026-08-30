@@ -43,7 +43,7 @@ struct ClaudeProviderBehaviourTests {
         // The beta gate is what the endpoint requires; without it the call 404s.
         #expect(headers["anthropic-beta"] == "oauth-2025-04-20")
         // Identifying the client demonstrably affects how fast the endpoint starts refusing.
-        #expect(headers["User-Agent"]?.contains("SideNotch") == true)
+        #expect(headers["User-Agent"]?.contains("TopNotch") == true)
 
         let url = await recorder.url
         #expect(url?.host == "api.anthropic.com")

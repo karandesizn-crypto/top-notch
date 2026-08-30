@@ -110,7 +110,7 @@ struct SettingsView: View {
                     set: { settings.launchAtLogin = $0; LaunchAtLogin.set($0) }
                 ))
                 if !LaunchAtLogin.isSupported {
-                    Text("Available once SideNotch is running from an app bundle.")
+                    Text("Available once Top Notch is running from an app bundle.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -143,7 +143,7 @@ struct SettingsView: View {
                     set: { settings.showsWithoutNotch = $0; onSettingsChanged() }
                 ))
             } footer: {
-                Text("SideNotch lives in the camera notch. On a display without one it has "
+                Text("Top Notch lives in the camera notch. On a display without one it has "
                      + "nothing to attach to, so it stays hidden and the menu bar item is "
                      + "the way in. Turn this on if your Mac has no notch at all.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -159,7 +159,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Enable notifications", isOn: $settings.notificationsEnabled)
                 if !NotificationService.isAvailable {
-                    Text("Available once SideNotch is running from an app bundle.")
+                    Text("Available once Top Notch is running from an app bundle.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

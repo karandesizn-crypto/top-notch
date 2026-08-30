@@ -1,15 +1,15 @@
 # Codex Integration
 
-How SideNotch reads live Codex usage, and how that contract was established.
+How Top Notch reads live Codex usage, and how that contract was established.
 
 ## What it uses
 
 Codex's own **app-server** — the supported local integration surface its editor extensions
-use. SideNotch launches `codex app-server`, speaks JSON-RPC over the child process's stdio,
+use. Top Notch launches `codex app-server`, speaks JSON-RPC over the child process's stdio,
 and calls one method.
 
 ```
-initialize                    → handshake (clientInfo: SideNotch)
+initialize                    → handshake (clientInfo: Top Notch)
 initialized                   → notification
 account/rateLimits/read       → GetAccountRateLimitsResponse
 account/rateLimits/updated    → server notification, triggers a refresh

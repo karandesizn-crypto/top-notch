@@ -62,7 +62,10 @@ public final class FileUsageCache: UsageCaching, @unchecked Sendable {
     public static var defaultDirectory: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return support.appendingPathComponent("SideNotch", isDirectory: true)
+        // Renamed with the product. No fallback to the old location on purpose: this
+        // file is a warm start, not data, and one refresh rebuilds it. The Logos directory
+        // beside it holds files a person put there by hand and *does* keep a fallback.
+        return support.appendingPathComponent("Top Notch", isDirectory: true)
     }
 
     public func load() -> [ProviderType: UsageState] {

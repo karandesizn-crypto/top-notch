@@ -8,7 +8,7 @@
 > still the reason the integrations had to be unofficial.
 
 **Date:** 2026-08-30
-**Scope:** Every provider SideNotch ships or could ship. What data exists, whether it can
+**Scope:** Every provider Top Notch ships or could ship. What data exists, whether it can
 be read legitimately, and whether it is safe to ship.
 
 Findings are from direct inspection of this machine and of Anthropic's published API
@@ -29,7 +29,7 @@ documentation. Nothing here is inferred from memory.
 
 ## Codex — Implement
 
-**Mechanism.** SideNotch spawns `codex app-server` as a child process and speaks JSON-RPC
+**Mechanism.** Top Notch spawns `codex app-server` as a child process and speaks JSON-RPC
 over its stdio. It reads `account/rateLimits/read` on demand and subscribes to
 `account/rateLimits/updated` for push updates.
 
@@ -150,7 +150,7 @@ entry. This is excluded on three independent grounds:
    third-party tools calling this endpoint with a borrowed token have triggered
    token-family revocation, logging the user out of Claude Code.
 
-**Decision: `unsupported`.** SideNotch shows "No local usage API yet" and no figures.
+**Decision: `unsupported`.** Top Notch shows "No local usage API yet" and no figures.
 This is the outcome §7 prescribes: *if a provider does not expose a reliable integration
 method, do not fake it.*
 

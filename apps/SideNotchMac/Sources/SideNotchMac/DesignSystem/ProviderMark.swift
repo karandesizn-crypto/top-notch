@@ -158,10 +158,10 @@ enum CursorGeometry {
 /// without touching the code:
 ///
 /// ```
-/// ~/Library/Application Support/SideNotch/Logos/<provider-id>.png
+/// ~/Library/Application Support/Top Notch/Logos/<provider-id>.png
 /// ```
 ///
-/// Falling back to the drawn vector, and finally to an SF Symbol for a tool SideNotch has
+/// Falling back to the drawn vector, and finally to an SF Symbol for a tool Top Notch has
 /// no mark for.
 struct ProviderLogo: View {
     let provider: ProviderType
@@ -216,7 +216,18 @@ struct ProviderLogo: View {
     /// Directory the user can drop exact brand artwork into.
     static var logoDirectory: URL {
         URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support/SideNotch/Logos")
+            .appendingPathComponent("Library/Application Support/Top Notch/Logos")
+    }
+
+    /// Where the same artwork lived before the product was renamed.
+    ///
+    /// Read-only, and searched only after the current location. The cache beside it is
+    /// disposable and simply moved, but this directory holds files a person put there by
+    /// hand — silently ignoring them because the app changed its own name would look
+    /// exactly like the feature breaking.
+    static var legacyLogoDirectory: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Application Support/Top Notch/Logos")
     }
 
     /// Cached so a missing file is not re-checked on every render pass.
@@ -238,13 +249,17 @@ private final class SuppliedLogoCache: @unchecked Sendable {
         if let cached = loaded[provider.rawValue] { return cached }
 
         var found: NSImage?
-        for ext in ["png", "pdf", "svg"] {
-            let url = ProviderLogo.logoDirectory
-                .appendingPathComponent("\(provider.rawValue).\(ext)")
-            if FileManager.default.fileExists(atPath: url.path),
-               let image = NSImage(contentsOf: url) {
-                found = image
-                break
+        // Current location first, then the pre-rename one, so artwork dropped in by hand
+        // survives the product being renamed.
+        let directories = [ProviderLogo.logoDirectory, ProviderLogo.legacyLogoDirectory]
+        search: for directory in directories {
+            for ext in ["png", "pdf", "svg"] {
+                let url = directory.appendingPathComponent("\(provider.rawValue).\(ext)")
+                if FileManager.default.fileExists(atPath: url.path),
+                   let image = NSImage(contentsOf: url) {
+                    found = image
+                    break search
+                }
             }
         }
         loaded[provider.rawValue] = found
