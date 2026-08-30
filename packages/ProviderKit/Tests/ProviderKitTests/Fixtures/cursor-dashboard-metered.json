@@ -1,0 +1,20 @@
+{
+  "planUsage": {
+    "apiPercentUsed": 12.5,
+    "autoPercentUsed": 61.0,
+    "bonusTooltip": "",
+    "limit": 2000,
+    "remaining": 530,
+    "remainingBonus": 0,
+    "totalPercentUsed": 73.5
+  },
+  "billingCycleStart": "1787990901000",
+  "billingCycleEnd": "1790669301000",
+  "spendLimitUsage": { "limitType": "none" },
+  "enabled": 1,
+  "displayThreshold": 200,
+  "displayMessage": "",
+  "autoBucketModels": [],
+  "autoModelSelectedDisplayMessage": "",
+  "namedModelSelectedDisplayMessage": ""
+}

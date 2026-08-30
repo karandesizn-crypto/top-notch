@@ -94,6 +94,17 @@ enum CursorUsageDecoder {
         )
     }
 
+    /// Accepts a number whether it arrives as JSON number or string.
+    ///
+    /// Cursor's dashboard service sends percentages as numbers and its timestamps as
+    /// numeric strings in the same payload, so tolerance here is not hypothetical.
+    static func number(_ value: Any?) -> Double? {
+        if let double = value as? Double { return double }
+        if let int = value as? Int { return Double(int) }
+        if let string = value as? String { return Double(string) }
+        return nil
+    }
+
     static func integer(_ value: Any?) -> Int? {
         if let int = value as? Int { return int }
         if let double = value as? Double, double.isFinite { return Int(double) }

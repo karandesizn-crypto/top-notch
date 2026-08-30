@@ -9,19 +9,39 @@ import Foundation
 /// usage endpoint burns the rate limit the product depends on.
 
 /// Returns a canned HTTP outcome without a network call.
+///
+/// GET and POST are answered separately because Cursor now tries its Connect RPC dashboard
+/// endpoint (POST) before falling back to the legacy request-pool endpoint (GET). A stub
+/// that answered both identically would feed a legacy payload to the dashboard decoder and
+/// fail for reasons that have nothing to do with the test.
+///
+/// POST therefore defaults to a 404, which is what makes an unqualified
+/// `StubHTTPClient(.success(...))` mean "the legacy path answers this" — the shape most of
+/// these tests want.
 struct StubHTTPClient: UsageHTTPPerforming {
-    let outcome: HTTPOutcome
-    /// Records the headers of the last request so tests can assert on them.
+    let getOutcome: HTTPOutcome
+    let postOutcome: HTTPOutcome
+    /// Records the requests so tests can assert on headers, method and count.
     let recorder: HeaderRecorder?
 
-    init(_ outcome: HTTPOutcome, recorder: HeaderRecorder? = nil) {
-        self.outcome = outcome
+    init(
+        _ getOutcome: HTTPOutcome,
+        post postOutcome: HTTPOutcome = .http(status: 404),
+        recorder: HeaderRecorder? = nil
+    ) {
+        self.getOutcome = getOutcome
+        self.postOutcome = postOutcome
         self.recorder = recorder
     }
 
     func get(_ url: URL, headers: [String: String]) async -> HTTPOutcome {
-        await recorder?.record(url: url, headers: headers)
-        return outcome
+        await recorder?.record(method: "GET", url: url, headers: headers)
+        return getOutcome
+    }
+
+    func post(_ url: URL, headers: [String: String], body: Data) async -> HTTPOutcome {
+        await recorder?.record(method: "POST", url: url, headers: headers)
+        return postOutcome
     }
 }
 
@@ -30,11 +50,21 @@ actor HeaderRecorder {
     private(set) var url: URL?
     private(set) var headers: [String: String] = [:]
     private(set) var callCount = 0
+    private(set) var methods: [String] = []
+    /// Every request, so a test can assert on the one it cares about rather than the last.
+    private(set) var requests: [(method: String, url: URL, headers: [String: String])] = []
 
-    func record(url: URL, headers: [String: String]) {
+    func record(method: String, url: URL, headers: [String: String]) {
         self.url = url
         self.headers = headers
+        methods.append(method)
+        requests.append((method, url, headers))
         callCount += 1
+    }
+
+    /// Headers of the first request made with `method`.
+    func headers(forFirst method: String) -> [String: String]? {
+        requests.first { $0.method == method }?.headers
     }
 }
 

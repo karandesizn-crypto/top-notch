@@ -95,8 +95,12 @@ if ProcessInfo.processInfo.environment["SIDENOTCH_PROBE_SCHEMA"] == "1" {
                     describe(child, indent: indent + 2)
                 } else {
                     // Numbers and booleans are usage figures — safe and useful to see.
-                    // Strings could carry an identifier, so only their type is printed.
-                    let rendered = (child is String) ? "string" : "\(child)"
+                    // Strings could carry an identifier, so only their type is printed —
+                    // except timestamps, whose format has to be known to parse them and
+                    // which identify nobody.
+                    let isTimestamp = ["cycle", "date", "time", "reset", "expir"]
+                        .contains { key.lowercased().contains($0) }
+                    let rendered = (child is String && !isTimestamp) ? "string" : "\(child)"
                     print("\(pad)\(key): \(rendered)")
                 }
             }
@@ -109,7 +113,14 @@ if ProcessInfo.processInfo.environment["SIDENOTCH_PROBE_SCHEMA"] == "1" {
     let candidates = [
         "https://api2.cursor.sh/auth/usage",
         "https://cursor.com/api/usage-summary",
-        "https://cursor.com/api/auth/me",
+    ]
+
+    // Connect RPC. POST-only even for reads, empty body, and crucially bearer-authenticated
+    // rather than cookie-authenticated — so it stays inside the boundary this project drew
+    // (reuse the client's credential as a client; never reconstruct the browser's).
+    let rpcCandidates = [
+        "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+        "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo",
     ]
 
     print("── Cursor endpoint schemas ──────────────────────────────────────────────")
@@ -134,6 +145,29 @@ if ProcessInfo.processInfo.environment["SIDENOTCH_PROBE_SCHEMA"] == "1" {
             case .rateLimited:       print("\n\(endpoint)  →  429")
             case .http(let status):  print("\n\(endpoint)  →  \(status)")
             case .transport(let d):  print("\n\(endpoint)  →  \(d)")
+            }
+        }
+
+        for endpoint in rpcCandidates {
+            guard let url = URL(string: endpoint) else { continue }
+            let outcome = await http.post(url, headers: [
+                "Authorization": "Bearer \(credential.accessToken.reveal())",
+                "Content-Type": "application/json",
+                "Connect-Protocol-Version": "1",
+            ], body: Data("{}".utf8))
+            let name = endpoint.split(separator: "/").last.map(String.init) ?? endpoint
+            switch outcome {
+            case .success(let data):
+                print("\n\(name)  →  200")
+                if let root = try? JSONSerialization.jsonObject(with: data) {
+                    describe(root)
+                } else {
+                    print("  (not JSON, \(data.count) bytes)")
+                }
+            case .unauthorized:      print("\n\(name)  →  401 (bearer not accepted)")
+            case .rateLimited:       print("\n\(name)  →  429")
+            case .http(let status):  print("\n\(name)  →  \(status)")
+            case .transport(let d):  print("\n\(name)  →  \(d)")
             }
         }
     } catch {

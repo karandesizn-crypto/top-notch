@@ -22,7 +22,7 @@ the **credential** that would let us ask for the figures, which was in the same 
 |---|---|---|---|---|
 | **Codex** | `codex app-server` JSON-RPC over stdio | Official CLI surface | ✅ figures returned | **High** |
 | **Claude** | `api.anthropic.com/api/oauth/usage` + Keychain token | **Unofficial** | ⚠️ auth path verified; success path blocked by a lapsed token | **Medium** |
-| **Cursor** | `api2.cursor.sh/auth/usage` + `state.vscdb` token | **Unofficial** | ✅ 200 + decoded | **Medium-low** |
+| **Cursor** | `DashboardService/GetCurrentPeriodUsage` (Connect RPC) + `state.vscdb` token | **Unofficial** | ✅ real percentage returned | **Medium** |
 
 ---
 
@@ -127,9 +127,22 @@ and logged. A renamed schema therefore surfaces as "unavailable", never as a con
 ## Cursor
 
 ### Data source
-`GET https://api2.cursor.sh/auth/usage`, bearer-authenticated with the token from
+`POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`, spoken
+over **Connect RPC** (POST-only even for reads, empty body,
+`Connect-Protocol-Version: 1`), bearer-authenticated with the token from
 `cursorAuth/accessToken` in
 `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
+
+`GET https://api2.cursor.sh/auth/usage` remains as a fallback for older accounts still
+governed by a request quota. It is tried only when the dashboard call fails, so the normal
+path is one request.
+
+**This endpoint came from reading `zchan0/MyUsage`.** The first implementation used only
+`/auth/usage`, which answers 200 on a modern account with every ceiling `null` — no
+percentage exists, so Cursor showed "No metered quota". The dashboard service returns a
+real `totalPercentUsed`, the included allowance in cents, and the billing cycle, on the
+same bearer token, with no cookie. Verified live: Cursor went from no reading at all to
+"Included usage — 0% — Resets Sep 29".
 
 ### Official or unofficial
 **Unofficial.** Cursor publishes no usage API and no CLI that reports quota — `cursor
@@ -210,14 +223,16 @@ over that way — it would show a percentage the account no longer has. So a rea
 `readSucceeded` always wins over the cache.
 
 ### Known limitations
-1. **The bearer endpoint describes the legacy request pool.** On an account using
-   usage-based pricing every ceiling is `null`, so there is no percentage to show. The
-   adapter reports `.unavailable` with "No metered quota" rather than a blank ring — the
-   read succeeded, there is simply nothing metered. **This is the state on this machine.**
-2. Dollar-denominated usage-based-pricing figures are out of reach by the cookie decision
-   above. A partial honest reading beats a complete dishonest one.
-3. Schema is taken from several independent extensions plus one live 200 response. Less
-   corroborated than Claude's.
+1. **The legacy fallback describes a request pool that modern accounts do not use.** When
+   the dashboard call fails and the fallback answers, every ceiling on a usage-based account
+   is `null`, so no percentage exists and the adapter reports "No metered quota". That is
+   the read succeeding and finding nothing metered — not a fault.
+2. **A zero allowance is still reported as no metered quota**, not as a 0% ring. A
+   percentage with no allowance behind it describes nothing.
+3. The response carries display copy, a 28-entry model list and threshold hints that are
+   deliberately ignored; only `planUsage` and the billing cycle are consumed.
+4. Undocumented and unversioned. Schema is corroborated by one reference implementation plus
+   live responses from this account.
 
 ---
 
@@ -244,12 +259,70 @@ Every one of these is enforced by a test in `ProviderKitTests`:
 No test opens a socket or touches the real keychain; both are injected seams. The suite
 runs in ~0.02s.
 
+## Reference implementations
+
+Three comparable open-source projects were read and compared against this implementation:
+[`steipete/CodexBar`](https://github.com/steipete/CodexBar),
+[`zchan0/MyUsage`](https://github.com/zchan0/MyUsage), and
+[`fdtorres1/AgentMeter`](https://github.com/fdtorres1/AgentMeter).
+
+### Adopted
+
+**Cursor's Connect RPC dashboard endpoint** (from MyUsage). Detailed above. This is the
+single largest improvement in the integration: Cursor went from reporting nothing to
+reporting a real percentage, without moving the cookie boundary an inch. The reference
+supplied the endpoint name and the `Connect-Protocol-Version` header; the DTOs, validation,
+drift detection, and no-metered-quota handling are ours.
+
+**Reading both credential stores rather than the first that answers** (from MyUsage, which
+reads `~/.claude/.credentials.json` before the keychain). The original implementation
+short-circuited on a successful keychain read. That looks reasonable and is subtly wrong:
+the two stores can disagree, and Claude Code writes to whichever its install uses while
+leaving the other frozen. A stale keychain item could therefore shadow a working file and
+produce a lapsed-sign-in report with a good credential on disk beside it. Both are now read
+and ranked. Rather than adopting the reference's fixed order, the existing `best(of:)`
+ranking was extended over the union — order-independence is the more robust property.
+
+### Evaluated and declined
+
+**Delegated token refresh** (MyUsage's `ClaudeDelegatedRefresh`). This solves precisely the
+blocker documented below: when Claude Code's persisted token has lapsed, it spawns the
+`claude` CLI on a pseudo-terminal so that *Claude Code itself* rotates the keychain
+credential, then re-reads it. The reasoning is sound and matches this project's own rule —
+never refresh the token ourselves, because that is what revokes the user's CLI session.
+
+It is not adopted, for reasons of implementation rather than principle. It drives another
+application's CLI through a PTY, periodically injecting Enter keypresses to dismiss any
+prompt, with an 8-second timeout and a 5-minute cooldown. That is a lot of moving parts to
+add to a production app for a condition the user resolves with one command — and it cannot
+be verified from here, so it would ship untested. Spawning a vendor CLI on a timer is also
+a side effect a usage monitor should not have by default.
+
+If the stale-token case turns out to be common rather than incidental, this is the right
+shape for the fix, and it should arrive opt-in and off by default.
+
+**Cursor token refresh via `/oauth/token`** (MyUsage). Rejected outright: same
+refresh-token rotation hazard as Claude's, against the rule that this app never renews a
+credential it did not issue.
+
+**Shelling out to `/usr/bin/security`** as a keychain fallback (MyUsage). Not needed — the
+`SecItemCopyMatching` path works on this machine once `kSecMatchLimitAll` is paired with
+`kSecReturnAttributes`. Worth revisiting only if ACL denials show up in the field.
+
+### Already aligned
+
+AgentMeter's `CredentialAssessment` makes a point worth recording: a failed verification
+must not cause a stored credential to be discarded, because a transient network failure is
+indistinguishable from an invalid key at the moment it happens. This implementation never
+stores a credential at all, so the hazard cannot arise — but the same instinct is why a 401
+here reports and waits rather than treating the credential as dead.
+
 ## Live verification status
 
 | Provider | Status | Evidence |
 |---|---|---|
 | **Codex** | ✅ **Verified** | 30-day window, 0% used, plan "go", reset Sep 29 — re-confirmed after all Phase 4 refactoring |
-| **Cursor** | ✅ **Verified** | 200 from `api2.cursor.sh/auth/usage`, decoded, correctly reports "No metered quota" for this account |
+| **Cursor** | ✅ **Verified** | Dashboard RPC returns a real reading: "Included usage — 0% — Resets Sep 29" |
 | **Claude** | ⏸ **Pending user action** | Credential read and authentication path confirmed; no 200 observed |
 
 ### What Claude needs

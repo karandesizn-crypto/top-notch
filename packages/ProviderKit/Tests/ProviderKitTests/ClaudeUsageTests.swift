@@ -229,6 +229,38 @@ struct ClaudeCredentialTests {
         #expect(ClaudeCredentialSource.best(of: []) == nil)
     }
 
+    @Test("a live file credential wins over a stale keychain one")
+    func bothStoresAreConsidered() throws {
+        // The reason both stores are read rather than the first that answers. Claude Code
+        // writes to whichever its install uses and leaves the other frozen, so a stale
+        // keychain item can shadow a working file — reporting a lapsed sign-in with a good
+        // credential sitting on disk beside it.
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let file = directory.appendingPathComponent(".credentials.json")
+        try fixture("claude-credentials-valid").write(to: file)
+
+        // Keychain disabled stands in for "the keychain had nothing better to offer".
+        let source = ClaudeCredentialSource(fileURL: file, keychainEnabled: false)
+        let credential = try source.read()
+        #expect(credential.origin == .file)
+        #expect(credential.grantsUsageRead)
+    }
+
+    @Test("with neither store readable, the failure is a sign-in problem")
+    func noStoresAtAll() {
+        let source = ClaudeCredentialSource(
+            fileURL: URL(fileURLWithPath: "/nonexistent/.credentials.json"),
+            keychainEnabled: false
+        )
+        #expect(throws: ProviderError.authenticationRequired) {
+            try source.read()
+        }
+    }
+
     @Test("keychain payloads are extracted from every shape the API returns")
     func payloadShapes() {
         let bytes = Data("blob".utf8)

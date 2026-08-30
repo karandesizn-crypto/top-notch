@@ -44,7 +44,20 @@ public struct CursorUsageProvider: UsageProvider {
     private let limiter: EndpointRateLimiter
     private let endpoint: URL
 
+    /// Legacy request-pool endpoint. Correct for older quota-based accounts, and null on
+    /// everything else.
     public static let defaultEndpoint = URL(string: "https://api2.cursor.sh/auth/usage")!
+
+    /// Cursor's dashboard service, spoken over Connect RPC.
+    ///
+    /// POST-only even though it is a read, empty body, and — the reason it is usable here —
+    /// authenticated by the same bearer token the editor holds rather than by a browser
+    /// session cookie. It stays on the right side of the boundary this adapter draws while
+    /// returning the figures `/auth/usage` cannot: a real `totalPercentUsed`, the included
+    /// allowance, and the billing cycle.
+    public static let dashboardEndpoint = URL(
+        string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
+    )!
 
     public init(
         credentials: CursorCredentialReading = CursorCredentialSource(),
@@ -82,6 +95,35 @@ public struct CursorUsageProvider: UsageProvider {
             return UsageState.unavailable(provider: providerType, reason: "Waiting to refresh")
         }
 
+        // The dashboard service first: it is the only one that describes a modern account.
+        let dashboard = await http.post(
+            Self.dashboardEndpoint,
+            headers: [
+                "Authorization": "Bearer \(credential.accessToken.reveal())",
+                "Content-Type": "application/json",
+                // Connect RPC's protocol marker. Without it the service rejects the call.
+                "Connect-Protocol-Version": "1",
+                "User-Agent": ClaudeUsageProvider.userAgent,
+            ],
+            body: Data("{}".utf8)
+        )
+
+        if case .success(let data) = dashboard {
+            await limiter.recordSuccess()
+            let dto = try CursorPeriodUsageDecoder.decode(data)
+            let unknown = CursorPeriodUsageDecoder.unknownKeys(in: data)
+            if !unknown.isEmpty {
+                Log.provider.notice(
+                    "Cursor dashboard schema drift: unrecognised keys \(unknown.joined(separator: ","), privacy: .public)"
+                )
+            }
+            return CursorPeriodUsageMapper.snapshot(from: dto, unknownKeys: unknown)
+        }
+
+        // Anything else falls through to the legacy request-pool endpoint. It reports
+        // nothing useful on usage-based pricing, but it is the correct answer for an older
+        // account still governed by a request quota — and it costs one request only when
+        // the dashboard has already failed.
         let outcome = await http.get(
             endpoint,
             headers: [

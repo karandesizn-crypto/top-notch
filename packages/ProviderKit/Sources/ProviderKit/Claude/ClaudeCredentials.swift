@@ -117,33 +117,48 @@ public struct ClaudeCredentialSource: ClaudeCredentialReading {
         self.keychainEnabled = keychainEnabled
     }
 
+    /// Gathers every credential this machine holds and returns the best one.
+    ///
+    /// Both stores are consulted, not just the first that answers. Short-circuiting on a
+    /// successful keychain read looks reasonable and is subtly wrong: the two stores can
+    /// disagree, and the one that answers first is not necessarily the one with a live
+    /// token. Claude Code writes to whichever its install uses, leaving the other frozen at
+    /// whatever it last held — so a stale keychain item can shadow a perfectly good file,
+    /// and the adapter would report a lapsed sign-in with a working credential sitting on
+    /// disk beside it.
+    ///
+    /// Ranking across the union costs one extra file read and removes that whole class of
+    /// failure.
     public func read() throws -> ClaudeOAuthCredential {
-        var keychainFailure: ProviderError?
+        var candidates: [ClaudeOAuthCredential] = []
+        var firstFailure: ProviderError?
 
         #if os(macOS)
         if keychainEnabled {
             do {
-                let candidates = try Self.readKeychainItems().compactMap {
+                candidates += try Self.readKeychainItems().compactMap {
                     try? Self.parse($0, origin: .keychain)
                 }
-                if let best = Self.best(of: candidates) {
-                    return best
-                }
-                keychainFailure = .authenticationRequired
             } catch let error as ProviderError {
-                // Fall through to the file. A missing keychain item is normal on installs
-                // that use the file store; a denied ACL is not, but the file may still
-                // work, and reporting the file's outcome is more useful either way.
-                keychainFailure = error
+                // A missing item is normal on installs that use the file store; a denied
+                // ACL is not. Either way the file may still answer, so record and continue.
+                firstFailure = error
             }
         }
         #endif
 
         if let data = try? Data(contentsOf: fileURL) {
-            return try Self.parse(data, origin: .file)
+            do {
+                candidates.append(try Self.parse(data, origin: .file))
+            } catch let error as ProviderError {
+                firstFailure = firstFailure ?? error
+            }
         }
 
-        throw keychainFailure ?? .authenticationRequired
+        if let best = Self.best(of: candidates) {
+            return best
+        }
+        throw firstFailure ?? .authenticationRequired
     }
 
     #if os(macOS)

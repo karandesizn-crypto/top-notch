@@ -19,6 +19,7 @@ public enum HTTPOutcome: Sendable {
 /// a socket or a credential.
 public protocol UsageHTTPPerforming: Sendable {
     func get(_ url: URL, headers: [String: String]) async -> HTTPOutcome
+    func post(_ url: URL, headers: [String: String], body: Data) async -> HTTPOutcome
 }
 
 /// The single place in SideNotch that touches the network.
@@ -51,8 +52,24 @@ public struct UsageHTTPClient: UsageHTTPPerforming {
 
     /// Performs one GET. `headers` is the only place a `Secret` is revealed.
     public func get(_ url: URL, headers: [String: String]) async -> HTTPOutcome {
+        await send("GET", url, headers: headers, body: nil)
+    }
+
+    /// Performs one POST.
+    ///
+    /// Needed because Cursor's dashboard service speaks Connect RPC, which is POST-only
+    /// even for reads — `GetCurrentPeriodUsage` takes an empty body and returns the usage
+    /// figures. Still a read: nothing here mutates provider state.
+    public func post(_ url: URL, headers: [String: String], body: Data) async -> HTTPOutcome {
+        await send("POST", url, headers: headers, body: body)
+    }
+
+    private func send(
+        _ method: String, _ url: URL, headers: [String: String], body: Data?
+    ) async -> HTTPOutcome {
         var request = URLRequest(url: url, timeoutInterval: timeout)
-        request.httpMethod = "GET"
+        request.httpMethod = method
+        request.httpBody = body
         request.httpShouldHandleCookies = false
         for (field, value) in headers {
             request.setValue(value, forHTTPHeaderField: field)
