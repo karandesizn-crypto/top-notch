@@ -78,6 +78,15 @@ public final class AppSettings {
         didSet { store(showsWithoutNotch, .showsWithoutNotch) }
     }
 
+    /// Tucked out of the way, leaving the screen clear.
+    ///
+    /// Persisted, because hiding the surface is something you do to get it off the screen
+    /// while you work — and having to hide it again after every relaunch would defeat that.
+    /// The menu bar item is always present, so there is always an obvious way back.
+    public var surfaceHidden: Bool {
+        didSet { store(surfaceHidden, .surfaceHidden) }
+    }
+
     public var thresholds: UsageThresholds {
         UsageThresholds(warning: warningThreshold / 100, critical: criticalThreshold / 100)
     }
@@ -92,7 +101,7 @@ public final class AppSettings {
     private enum Key: String {
         case enabledProviders, customProviders, launchAtLogin, refreshInterval
         case showPercentages, showResetCountdown, warningThreshold, criticalThreshold
-        case notificationsEnabled, appearance, showsWithoutNotch
+        case notificationsEnabled, appearance, showsWithoutNotch, surfaceHidden
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -129,6 +138,7 @@ public final class AppSettings {
             rawValue: defaults.string(forKey: Key.appearance.rawValue) ?? ""
         ) ?? .system
         showsWithoutNotch = defaults.object(forKey: Key.showsWithoutNotch.rawValue) as? Bool ?? false
+        surfaceHidden = defaults.object(forKey: Key.surfaceHidden.rawValue) as? Bool ?? false
     }
 
     public func isEnabled(_ provider: ProviderType) -> Bool { enabledProviders.contains(provider) }

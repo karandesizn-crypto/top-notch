@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var placement: DisplayPlacementService!
     private var notifications: NotificationService!
     private var statusItem: NSStatusItem?
+    /// Retitled from the live state whenever the menu opens.
+    private var hideMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
 
     nonisolated override init() { super.init() }
@@ -157,6 +159,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
+        // Title is set from the live state each time the menu opens; see `menuNeedsUpdate`.
+        let hideItem = menu.addItem(
+            withTitle: "Hide Top Notch", action: #selector(toggleSurfaceHidden), keyEquivalent: "h"
+        )
+        hideItem.target = self
+        self.hideMenuItem = hideItem
+        menu.delegate = self
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
@@ -164,6 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .target = self
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func toggleSurfaceHidden() {
+        controller.setSurfaceHidden(!controller.isSurfaceHidden)
     }
 
     @objc private func refreshNow() {
@@ -270,5 +284,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return false
         #endif
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// Keeps the hide/show item honest.
+    ///
+    /// Read at open time rather than mirrored into a stored flag, so the title cannot drift
+    /// out of step with the surface it describes.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        hideMenuItem?.title = controller.isSurfaceHidden ? "Show Top Notch" : "Hide Top Notch"
     }
 }

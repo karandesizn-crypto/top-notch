@@ -132,7 +132,11 @@ struct NotchRootView: View {
             .frame(height: layout.surfaceTopInset)
             .contentShape(Rectangle())
             .onHover { hovering in
-                guard hovering, !surface.isPinned else { return }
+                // `isMinimized` is checked here so that hiding the surface actually keeps
+                // it hidden. Without it, tucking it away and then moving the pointer near
+                // the notch would pop it straight back open, which is the opposite of what
+                // "hide this while I work" means. Bringing it back is the menu's job.
+                guard hovering, !surface.isPinned, !surface.isMinimized else { return }
                 withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
                     // Pointing at the notch opens the surface.
                     //
@@ -143,7 +147,6 @@ struct NotchRootView: View {
                     // rendered so nothing below could be hovered either, and the only way
                     // back was to hover the same band again. The observable result was that
                     // nothing ever appeared.
-                    surface.isMinimized = false
                     surface.isExpanded = true
                 }
             }
