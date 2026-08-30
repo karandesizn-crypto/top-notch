@@ -92,9 +92,6 @@ final class NotchWindowController {
     }
 
     func show() {
-        // Restore the tucked-away state before the surface is placed, so a hidden surface
-        // never flashes at full size on launch.
-        surface.isMinimized = settings.surfaceHidden
         applyAppearance()
         applyPlacement()
         installEscapeMonitor()
@@ -105,13 +102,13 @@ final class NotchWindowController {
 
     /// Tucks the surface away, or brings it back.
     ///
-    /// Driven from the menu bar rather than from a hover. The gesture that used to do this
-    /// lived on the camera housing — directly over the physical notch, which is where the
-    /// pointer goes when you want the surface *open* — so it fired constantly by accident
-    /// and made the app look broken. A menu item is deliberate, and it is always reachable
-    /// even when the surface is tucked away to a sliver.
+    /// The same state the housing hover toggles, reachable from the menu bar as well —
+    /// useful when the surface is already tucked to a sliver and you would rather click
+    /// than aim at it.
+    ///
+    /// Deliberately not persisted. Hiding is one pass of the pointer away, so an accidental
+    /// hover just before quitting would otherwise bring the app back looking broken.
     func setSurfaceHidden(_ hidden: Bool) {
-        settings.surfaceHidden = hidden
         withAnimation(Tokens.Motion.surface(reduceMotion: false)) {
             surface.isMinimized = hidden
             if hidden { surface.isExpanded = false; surface.isPinned = false }

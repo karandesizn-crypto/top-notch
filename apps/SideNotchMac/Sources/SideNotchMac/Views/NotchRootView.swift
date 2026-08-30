@@ -124,30 +124,30 @@ struct NotchRootView: View {
         .accessibilityLabel("Top Notch usage")
     }
 
-    /// The housing's own row. Nothing visible is drawn here — the camera has no pixels
-    /// behind it — but it is the region the pointer actually lands on when you go for the
-    /// notch, so it opens the surface.
+    /// The housing's own row — the camera's own strip, where nothing is drawn because
+    /// there are no pixels behind it.
+    ///
+    /// This is the handle. Pointing at the physical notch tucks the whole surface away to
+    /// the mini-notch; pointing at it again brings it back. Expansion belongs to the chips
+    /// below, which is what stops the two gestures fighting over the same pixels — and is
+    /// why hovering here must never expand: the housing is exactly where the pointer lands
+    /// on its way to everything else.
+    ///
+    /// Toggling on entry rather than continuously means one pass of the pointer fires it
+    /// once instead of flickering while the pointer rests there.
     private var housingHoverRegion: some View {
         Color.clear
             .frame(height: layout.surfaceTopInset)
             .contentShape(Rectangle())
             .onHover { hovering in
-                // `isMinimized` is checked here so that hiding the surface actually keeps
-                // it hidden. Without it, tucking it away and then moving the pointer near
-                // the notch would pop it straight back open, which is the opposite of what
-                // "hide this while I work" means. Bringing it back is the menu's job.
-                guard hovering, !surface.isPinned, !surface.isMinimized else { return }
+                guard hovering, !surface.isPinned else { return }
                 withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                    // Pointing at the notch opens the surface.
-                    //
-                    // This band used to toggle the tuck-away, and that made the app look
-                    // broken: the housing sits directly over the physical notch, which is
-                    // exactly where you point to interact with a notch app. Hovering it
-                    // minimised the surface to a 5pt sliver, the chip row stopped being
-                    // rendered so nothing below could be hovered either, and the only way
-                    // back was to hover the same band again. The observable result was that
-                    // nothing ever appeared.
-                    surface.isExpanded = true
+                    // The camera housing is the handle: pointing at the physical notch
+                    // tucks the whole surface away to the mini-notch, and pointing at it
+                    // again brings it back. Expansion belongs to the chips below, which is
+                    // what keeps the two gestures from fighting over the same pixels.
+                    surface.isMinimized.toggle()
+                    if surface.isMinimized { surface.isExpanded = false }
                 }
             }
             .accessibilityLabel(minimized ? "Show Top Notch" : "Hide Top Notch")
