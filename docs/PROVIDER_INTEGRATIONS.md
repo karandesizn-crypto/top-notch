@@ -21,7 +21,7 @@ the **credential** that would let us ask for the figures, which was in the same 
 | Provider | Source | Official | Live-verified | Confidence |
 |---|---|---|---|---|
 | **Codex** | `codex app-server` JSON-RPC over stdio | Official CLI surface | ✅ figures returned | **High** |
-| **Claude** | `api.anthropic.com/api/oauth/usage` + Keychain token | **Unofficial** | ⚠️ auth path verified; success path blocked by a lapsed token | **Medium** |
+| **Claude** | `api.anthropic.com/api/oauth/usage` + Keychain token | **Unofficial** | ✅ Session 52%, Weekly 37%, plan pro | **Medium** |
 | **Cursor** | `DashboardService/GetCurrentPeriodUsage` (Connect RPC) + `state.vscdb` token | **Unofficial** | ✅ real percentage returned | **Medium** |
 
 ---
@@ -113,14 +113,18 @@ and logged. A renamed schema therefore surfaces as "unavailable", never as a con
 - Credential re-read every fetch, never held between calls.
 
 ### Known limitations
-1. **Undocumented endpoint.** Assume it will break.
+1. **Undocumented endpoint.** Assume it will break. The decoder fails closed when it does.
 2. **We cannot renew a lapsed token** — by design. When Claude Code's *persisted* access
-   token expires, usage is unavailable until Claude Code writes a fresh one.
-3. **The success path is not live-verified.** On this machine the keychain credential's
-   `expiresAt` is `2026-08-29T16:44:53Z` and the endpoint returns 401. Everything up to and
-   including authentication is confirmed working — the keychain item is found, parsed, and
-   sent — but no 200 has been observed. The decoder is exercised only by fixtures.
+   token expires, usage is unavailable until Claude Code writes a fresh one. Observed to sit
+   stale for ~19 hours; see the remediation below.
+3. **The endpoint rate-limits hard and recovers slowly.** Six probe runs in a few minutes
+   earned a `rate_limit_error` that persisted across roughly an hour, with no `Retry-After`.
+   In normal operation the 180-second floor keeps well clear of this; it is a hazard for
+   development, not for use.
 4. Org-managed accounts may mint tokens without `user:profile`; those report unsupported.
+5. Only `five_hour` and `seven_day` were returned on this Pro account. The
+   `seven_day_opus` / `seven_day_sonnet` windows are decoded when present and simply absent
+   here — the adapter never assumes a fixed set.
 
 ---
 
@@ -323,31 +327,40 @@ here reports and waits rather than treating the credential as dead.
 |---|---|---|
 | **Codex** | ✅ **Verified** | 30-day window, 0% used, plan "go", reset Sep 29 — re-confirmed after all Phase 4 refactoring |
 | **Cursor** | ✅ **Verified** | Dashboard RPC returns a real reading: "Included usage — 0% — Resets Sep 29" |
-| **Claude** | ⏸ **Pending user action** | Credential read and authentication path confirmed; no 200 observed |
+| **Claude** | ✅ **Verified** | Session 52% (resets in 3h 50m), Weekly 37% (resets Thursday), plan `pro` |
 
-### What Claude needs
+### How the Claude blocker was resolved
 
-The login is healthy — `claude auth status` reports `loggedIn: true`, `authMethod:
-claude.ai`, `subscriptionType: pro`. What has lapsed is the *persisted* access token in the
-keychain, whose `expiresAt` is `2026-08-29T16:44:53Z`. Claude Code refreshes lazily and had
-not written a fresh one back.
+The stored access token had lapsed at `2026-08-29T16:44:53Z` and Claude Code had not
+rewritten it in ~19 hours of use. `claude auth status` reported `loggedIn: true` throughout
+— the *login* was healthy, only the persisted token was stale — and `claude auth status`
+does not itself trigger a refresh.
 
-To produce fresh state, run:
+The fix was to let Claude Code refresh its own credential, which is the same principle as
+MyUsage's delegated refresh but without the PTY automation that made that version
+unattractive:
 
 ```
-claude auth login
+claude -p "…" --no-session-persistence --max-budget-usd 0.50
 ```
 
-That re-authenticates through Claude Code's own flow and rewrites the
-`Claude Code-credentials` keychain item. Nothing in SideNotch can do this, by design — the
-adapter never refreshes a token, which is the rule that prevents it revoking the user's
-CLI session.
+`-p` is the documented non-interactive mode. Making any API call forces Claude Code to
+refresh its OAuth token and rewrite the keychain item, after which this adapter — which
+re-reads the credential on every fetch — picks up the new value with no coordination.
+Verified: stored expiry moved to `2026-08-30T18:48:19Z`, and the endpoint returned 200.
 
-A second condition also has to clear: the usage endpoint is currently returning **429** to
-this machine after repeated verification runs, and it stays limited for a period with no
-`Retry-After` to negotiate against. Until that lapses, a 429 masks whatever the auth state
-is. Both conditions met, `swift run usage-probe` should show Claude's `five_hour` and
-`seven_day` windows with real percentages.
+Two things worth recording for next time:
+
+- **`--max-budget-usd 0.01` is refused before the call is made.** The budget is checked
+  against an estimated ceiling, not actual spend, so too tight a cap fails closed and
+  refreshes nothing.
+- **Nothing in SideNotch does this.** It remains a manual remediation. Spawning a vendor
+  CLI on a timer is a side effect a usage monitor should not have, and the adapter's rule —
+  never renew a credential it did not issue — is what keeps it from revoking the user's CLI
+  session.
+
+If the token lapses again, either that command or `claude auth login` restores it, and the
+next poll recovers on its own.
 
 ## Diagnostics
 
