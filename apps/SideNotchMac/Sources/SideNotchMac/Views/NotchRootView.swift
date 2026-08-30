@@ -125,11 +125,8 @@ struct NotchRootView: View {
     }
 
     /// The housing's own row. Nothing visible is drawn here — the camera has no pixels
-    /// behind it — but hovering it tucks the chips away, and hovering it again brings them
-    /// back.
-    ///
-    /// Toggling on entry rather than continuously means one pass of the pointer fires it
-    /// once instead of flickering while the pointer rests there.
+    /// behind it — but it is the region the pointer actually lands on when you go for the
+    /// notch, so it opens the surface.
     private var housingHoverRegion: some View {
         Color.clear
             .frame(height: layout.surfaceTopInset)
@@ -137,8 +134,17 @@ struct NotchRootView: View {
             .onHover { hovering in
                 guard hovering, !surface.isPinned else { return }
                 withAnimation(Tokens.Motion.surface(reduceMotion: reduceMotion)) {
-                    surface.isMinimized.toggle()
-                    if surface.isMinimized { surface.isExpanded = false }
+                    // Pointing at the notch opens the surface.
+                    //
+                    // This band used to toggle the tuck-away, and that made the app look
+                    // broken: the housing sits directly over the physical notch, which is
+                    // exactly where you point to interact with a notch app. Hovering it
+                    // minimised the surface to a 5pt sliver, the chip row stopped being
+                    // rendered so nothing below could be hovered either, and the only way
+                    // back was to hover the same band again. The observable result was that
+                    // nothing ever appeared.
+                    surface.isMinimized = false
+                    surface.isExpanded = true
                 }
             }
             .accessibilityLabel(minimized ? "Show Top Notch" : "Hide Top Notch")
