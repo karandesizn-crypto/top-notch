@@ -28,6 +28,20 @@ public final class FileUsageCache: UsageCaching, @unchecked Sendable {
     /// never exercised is a liability.
     static let currentVersion = 1
 
+    /// Oldest reading worth restoring.
+    ///
+    /// The cache exists to avoid a blank rail in the second between launch and the first
+    /// read — it is not a history. A figure from days ago cannot serve that purpose for any
+    /// window this app tracks: the longest is seven days and the shortest is five hours, so
+    /// a day-old percentage is somewhere between meaningless and misleading.
+    ///
+    /// This matters because the machine it was built on had exactly this failure in another
+    /// form: a `cachedUsageUtilization` blob twelve days stale, which looked entirely
+    /// current to anything that did not check its timestamp. Old entries are dropped on
+    /// load, so a stale figure cannot come back at all rather than coming back and relying
+    /// on every downstream reader to notice.
+    public static let maximumAge: TimeInterval = 24 * 60 * 60
+
     private struct Document: Codable {
         var version: Int
         var entries: [String: UsageState]
@@ -52,13 +66,29 @@ public final class FileUsageCache: UsageCaching, @unchecked Sendable {
     }
 
     public func load() -> [ProviderType: UsageState] {
+        load(now: Date())
+    }
+
+    /// Clock-injectable form, so the expiry bound can be tested without waiting a day.
+    func load(now: Date) -> [ProviderType: UsageState] {
         lock.lock(); defer { lock.unlock() }
         var result: [ProviderType: UsageState] = [:]
         for (key, state) in entries {
+            guard !Self.isExpired(state, now: now) else { continue }
             // Marked on the way out, so a restored reading never presents as live.
             result[ProviderType(key)] = state.asCached()
         }
         return result
+    }
+
+    /// Whether a stored reading is too old to restore.
+    ///
+    /// A reading with no timestamp is dropped rather than trusted: we cannot show that it
+    /// is recent, and the whole point of the bound is not to display figures we cannot
+    /// date.
+    static func isExpired(_ state: UsageState, now: Date) -> Bool {
+        guard let lastUpdated = state.lastUpdated else { return true }
+        return now.timeIntervalSince(lastUpdated) > maximumAge
     }
 
     public func save(_ state: UsageState) {

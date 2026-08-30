@@ -8,6 +8,8 @@ import UsageKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
     private var manager: UsageManager!
+    /// Kept so the wake observer can be torn down on quit.
+    private var wakeObserver: (any NSObjectProtocol)?
     private var controller: NotchWindowController!
     private var placement: DisplayPlacementService!
     private var notifications: NotificationService!
@@ -55,12 +57,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await notifications.requestAuthorization()
             await manager.start()
         }
+
+        observeWake()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         // Terminating the app-server child process matters: it outlives us otherwise.
         let manager = self.manager
         Task { await manager?.stop() }
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+    }
+
+    /// Re-reads usage the moment the machine wakes.
+    ///
+    /// `RefreshScheduler` already detects this from the wall clock, so this is about
+    /// latency rather than correctness: without it the rail can show pre-sleep figures for
+    /// up to half a minute after the lid opens, which is precisely when someone glances at
+    /// it. Purely a trigger — no visual or layout behaviour is involved.
+    private func observeWake() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let manager = self?.manager else { return }
+            Task { await manager.refreshAll(trigger: .wake) }
+        }
     }
 
     // MARK: Status item

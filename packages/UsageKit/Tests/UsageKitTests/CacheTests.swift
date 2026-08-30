@@ -29,8 +29,10 @@ struct UsageCacheTests {
         let first = FileUsageCache(directory: directory)
         first.save(reading(.codex, percent: 42, at: when))
 
-        // A second instance stands in for the next app launch.
-        let restored = FileUsageCache(directory: directory).load()
+        // A second instance stands in for the next app launch. The clock is pinned just
+        // after the reading, since this test is about persistence, not recency.
+        let restored = FileUsageCache(directory: directory)
+            .load(now: when.addingTimeInterval(60))
         let codex = try? #require(restored[.codex])
         #expect(codex?.usedPercentage.map { Int($0.rounded()) } == 42)
         #expect(codex?.lastUpdated == when)
@@ -68,9 +70,41 @@ struct UsageCacheTests {
         cache.save(reading(.codex, percent: 10, at: Date(timeIntervalSince1970: 1_000)))
         cache.save(reading(.codex, percent: 80, at: Date(timeIntervalSince1970: 2_000)))
 
-        let restored = FileUsageCache(directory: directory).load()
+        let restored = FileUsageCache(directory: directory)
+            .load(now: Date(timeIntervalSince1970: 2_100))
         #expect(restored.count == 1)
         #expect(try #require(restored[.codex]).usedPercentage == 80)
+    }
+
+    @Test("a reading older than a day is not restored at all")
+    func expiredReadingIsDropped() {
+        // The cache is a warm start, not a history. A day-old percentage cannot describe
+        // a five-hour window, and restoring it would rely on every downstream reader
+        // noticing the timestamp — which is exactly the failure mode that made Claude's
+        // own twelve-day-stale cache unusable.
+        let directory = temporaryDirectory()
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        FileUsageCache(directory: directory).save(reading(.codex, percent: 42, at: when))
+
+        let justInside = when.addingTimeInterval(FileUsageCache.maximumAge - 60)
+        let justOutside = when.addingTimeInterval(FileUsageCache.maximumAge + 60)
+
+        #expect(FileUsageCache(directory: directory).load(now: justInside).count == 1)
+        #expect(FileUsageCache(directory: directory).load(now: justOutside).isEmpty)
+    }
+
+    @Test("a reading with no timestamp is dropped rather than trusted")
+    func undatedReadingIsDropped() {
+        // We cannot show that it is recent, and the whole point of the bound is to avoid
+        // displaying figures we cannot date.
+        let undated = UsageState(
+            provider: .codex,
+            status: .available,
+            source: .live,
+            lastUpdated: nil,
+            windows: [UsageWindow.fromPercentage(id: "p", label: "30-day", percent: 50)]
+        )
+        #expect(FileUsageCache.isExpired(undated, now: Date()))
     }
 
     @Test("providers are stored independently")
