@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Background utility: rail and menu bar only, no Dock icon, no main window.
         NSApp.setActivationPolicy(.accessory)
 
+        terminateOtherInstances()
+
         settings = AppSettings()
         notifications = NotificationService()
 
@@ -86,6 +88,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await manager?.stop() }
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+    }
+
+    /// Ends any other copy of this app that is already running, so the newest launch wins.
+    ///
+    /// LaunchServices normally prevents a second instance of a bundled app, but only for
+    /// copies it knows about. A build left running from a path that has since been renamed
+    /// or deleted keeps going indefinitely, invisible in the Dock because this app has no
+    /// Dock icon — and was found doing exactly that on this machine, hours after its bundle
+    /// had moved.
+    ///
+    /// Two instances is not a cosmetic problem. Both draw a notch surface, both hold a
+    /// Codex app-server child process, and both poll independently — which doubles the
+    /// request rate against an endpoint that rate-limits hard and stays limited for hours.
+    /// The rate limiter is per-process, so it cannot see the other one.
+    ///
+    /// The newest launch wins rather than exiting, because the common case is a rebuild:
+    /// what you want after installing a new build is the new build, not a silent refusal
+    /// to start.
+    private func terminateOtherInstances() {
+        let others = NSRunningApplication.runningApplications(
+            withBundleIdentifier: Bundle.main.bundleIdentifier ?? ""
+        ).filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+
+        guard !others.isEmpty else { return }
+        Log.app.notice("terminating \(others.count) older instance(s)")
+        for instance in others {
+            // Ask politely first: a clean termination is what stops the app-server child
+            // being orphaned, which `applicationWillTerminate` handles and a kill does not.
+            instance.terminate()
         }
     }
 
