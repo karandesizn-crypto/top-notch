@@ -144,14 +144,14 @@ public struct CursorUsageProvider: UsageProvider {
             }
             return CursorUsageMapper.snapshot(from: response)
 
-        case .unauthorized:
+        case .unauthorized(_):
             return UsageState.unavailable(provider: providerType, reason: "Sign in to Cursor")
 
-        case .rateLimited(let retryAfter):
+        case .rateLimited(let retryAfter, _):
             await limiter.recordRateLimited(retryAfter: retryAfter)
             return UsageState.unavailable(provider: providerType, reason: "Rate limited")
 
-        case .http(let status):
+        case .http(let status, _):
             await limiter.recordTransportFailure()
             Log.provider.error("Cursor usage HTTP \(status)")
             return UsageState.unavailable(provider: providerType, reason: "Service unavailable")
@@ -159,7 +159,7 @@ public struct CursorUsageProvider: UsageProvider {
         case .transport(let detail):
             await limiter.recordTransportFailure()
             Log.provider.debug("Cursor usage transport failure: \(detail, privacy: .public)")
-            return UsageState.unavailable(provider: providerType, reason: detail)
+            return UsageState.unavailable(provider: providerType, reason: detail.railSafe)
         }
         #endif
     }

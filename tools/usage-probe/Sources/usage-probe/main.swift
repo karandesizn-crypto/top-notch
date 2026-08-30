@@ -41,7 +41,7 @@ for provider in providers {
             var detail = ["\(usage.failure ?? "no reason given")", "source: \(usage.source.rawValue)"]
             // Adapter diagnostics — which store answered, what schema arrived. Field names
             // and locations only; the adapters never put a value in here.
-            for key in ["credentialSource", "storedExpiry", "storedExpiryPassed", "credentialReadDetail", "schemaUnknownKeys"] {
+            for key in ["credentialSource", "storedExpiry", "storedExpiryPassed", "endpointDetail", "httpStatus", "credentialReadDetail", "schemaUnknownKeys"] {
                 if let value = usage.metadata[key] { detail.append("\(key): \(value)") }
             }
             print(pad("", 10) + "└─ " + detail.joined(separator: "  ·  "))
@@ -75,6 +75,50 @@ for provider in providers {
     await provider.stopMonitoring()
 }
 print("")
+
+// MARK: Credential health
+//
+// Reports what the local credential stores hold, WITHOUT calling any endpoint. Separated
+// deliberately: once an endpoint starts rate-limiting, a 429 masks the auth state, and
+// asking it again to find out only extends the limit. Credential freshness is knowable
+// locally and costs nothing.
+//
+// Prints locations, scopes and timestamps. Never a token.
+if ProcessInfo.processInfo.environment["SIDENOTCH_PROBE_CREDS"] == "1" {
+    print("── Credential health (no network) ───────────────────────────────────────")
+
+    let iso = ISO8601DateFormatter()
+    do {
+        let credential = try ClaudeCredentialSource().read()
+        let expiry = credential.expiresAt.map { iso.string(from: $0) } ?? "not stated"
+        print("""
+          Claude
+            store          : \(credential.origin.rawValue)
+            scopes         : \(credential.scopes.joined(separator: ", "))
+            usage scope    : \(credential.grantsUsageRead ? "granted" : "MISSING user:profile")
+            token length   : \(credential.accessToken.count) chars
+            stored expiry  : \(expiry)
+            expired now    : \(credential.isExpired())
+        """)
+    } catch {
+        print("  Claude\n    unreadable: \(error)")
+    }
+
+    do {
+        let credential = try CursorCredentialSource().read()
+        let expiry = credential.expiresAt.map { iso.string(from: $0) } ?? "not stated"
+        print("""
+          Cursor
+            store          : state.vscdb
+            token length   : \(credential.accessToken.count) chars
+            stored expiry  : \(expiry)
+            expired now    : \(credential.isExpired())
+        """)
+    } catch {
+        print("  Cursor\n    unreadable: \(error)")
+    }
+    print("")
+}
 
 // MARK: Schema inspection
 //

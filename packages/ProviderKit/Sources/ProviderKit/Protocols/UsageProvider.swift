@@ -42,6 +42,23 @@ public enum ProviderError: Error, Equatable, Sendable {
 ///
 /// Deliberately free of any UI type. Adapters may spawn processes, read files, or call
 /// services; nothing above this protocol knows which.
+public extension String {
+    /// Clamps a string to something the rail can actually render.
+    ///
+    /// The transport failure path is the one place a `detail` string reaches
+    /// `UsageState.failure`, which the surface draws in a strip the width of the camera
+    /// housing. Today those details come from a fixed internal vocabulary — "Offline",
+    /// "Timed out" — so the clamp never fires. It exists because that is a property of the
+    /// current implementation rather than of the type: widening the vocabulary to include
+    /// `localizedDescription`, which is locale-dependent and can run to a paragraph, would
+    /// otherwise silently start rendering it.
+    var railSafe: String {
+        let limit = 32
+        guard count > limit else { return self }
+        return String(prefix(limit - 1)) + "…"
+    }
+}
+
 public protocol UsageProvider: Sendable {
     var providerType: ProviderType { get }
     var displayName: String { get }

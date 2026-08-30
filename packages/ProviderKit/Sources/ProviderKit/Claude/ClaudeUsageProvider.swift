@@ -138,7 +138,7 @@ public struct ClaudeUsageProvider: UsageProvider {
                 credentialOrigin: credential.origin
             )
 
-        case .unauthorized:
+        case .unauthorized(let detail):
             // The token was readable but refused by the endpoint. Do not refresh — that is
             // the account-safety rule. Claude Code will mint a new one on its next run and
             // the following poll picks it up.
@@ -161,27 +161,40 @@ public struct ClaudeUsageProvider: UsageProvider {
                     // expired token from every other angle.
                     "storedExpiry": credential.expiresAt
                         .map { ISO8601DateFormatter().string(from: $0) } ?? "absent",
+                    // Provider-controlled text: diagnostics only, never rendered.
+                    "endpointDetail": detail ?? "none",
                 ]
             )
 
-        case .rateLimited(let retryAfter):
+        case .rateLimited(let retryAfter, let detail):
             await limiter.recordRateLimited(retryAfter: retryAfter)
-            return UsageState.unavailable(
-                provider: providerType, reason: "Rate limited"
+            Log.provider.notice("Claude usage rate limited: \(detail ?? "no detail", privacy: .public)")
+            return UsageState(
+                provider: providerType,
+                status: .unavailable,
+                source: .unavailable,
+                lastUpdated: Date(),
+                failure: "Rate limited",
+                metadata: ["endpointDetail": detail ?? "none"]
             )
 
-        case .http(let status):
+        case .http(let status, let detail):
             await limiter.recordTransportFailure()
-            Log.provider.error("Claude usage HTTP \(status)")
-            return UsageState.unavailable(
-                provider: providerType, reason: "Service unavailable"
+            Log.provider.error("Claude usage HTTP \(status): \(detail ?? "no detail", privacy: .public)")
+            return UsageState(
+                provider: providerType,
+                status: .unavailable,
+                source: .unavailable,
+                lastUpdated: Date(),
+                failure: "Service unavailable",
+                metadata: ["endpointDetail": detail ?? "none", "httpStatus": String(status)]
             )
 
         case .transport(let detail):
             await limiter.recordTransportFailure()
             Log.provider.debug("Claude usage transport failure: \(detail, privacy: .public)")
             return UsageState.unavailable(
-                provider: providerType, reason: detail
+                provider: providerType, reason: detail.railSafe
             )
         }
         #endif

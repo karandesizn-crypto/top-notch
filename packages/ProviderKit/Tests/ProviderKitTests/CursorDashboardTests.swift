@@ -141,7 +141,7 @@ struct CursorEndpointPreferenceTests {
         let provider = CursorUsageProvider(
             credentials: StubCursorCredentials.valid(),
             http: StubHTTPClient(
-                .http(status: 500),
+                .http(status: 500, detail: nil),
                 post: .success(try fixture("cursor-dashboard-metered")),
                 recorder: recorder
             ),
@@ -166,7 +166,7 @@ struct CursorEndpointPreferenceTests {
             credentials: StubCursorCredentials.valid(),
             http: StubHTTPClient(
                 .success(try fixture("cursor-usage-metered")),
-                post: .http(status: 404),
+                post: .http(status: 404, detail: nil),
                 recorder: recorder
             ),
             limiter: unthrottled()
@@ -183,7 +183,7 @@ struct CursorEndpointPreferenceTests {
     func bothFail() async throws {
         let provider = CursorUsageProvider(
             credentials: StubCursorCredentials.valid(),
-            http: StubHTTPClient(.unauthorized, post: .http(status: 500)),
+            http: StubHTTPClient(.unauthorized(), post: .http(status: 500, detail: nil)),
             limiter: unthrottled()
         )
         let state = try await provider.fetchUsage()

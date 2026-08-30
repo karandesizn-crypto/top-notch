@@ -26,7 +26,7 @@ struct StubHTTPClient: UsageHTTPPerforming {
 
     init(
         _ getOutcome: HTTPOutcome,
-        post postOutcome: HTTPOutcome = .http(status: 404),
+        post postOutcome: HTTPOutcome = .http(status: 404, detail: nil),
         recorder: HeaderRecorder? = nil
     ) {
         self.getOutcome = getOutcome

@@ -104,7 +104,7 @@ struct CursorUsageDecodingTests {
         )
         let failed = try await CursorUsageProvider(
             credentials: StubCursorCredentials.valid(),
-            http: StubHTTPClient(.unauthorized),
+            http: StubHTTPClient(.unauthorized()),
             limiter: unthrottled()
         ).fetchUsage()
 

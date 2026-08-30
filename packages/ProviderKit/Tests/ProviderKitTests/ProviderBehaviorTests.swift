@@ -97,17 +97,80 @@ struct ClaudeProviderBehaviourTests {
             credentials: StubClaudeCredentials.valid(
                 expiresAt: Date(timeIntervalSince1970: 1_000_000)
             ),
-            http: StubHTTPClient(.unauthorized),
+            http: StubHTTPClient(.unauthorized()),
             limiter: unthrottled()
         )
         #expect(try await stale.fetchUsage().failure == "Sign-in expired")
 
         let live = ClaudeUsageProvider(
             credentials: StubClaudeCredentials.valid(),
-            http: StubHTTPClient(.unauthorized),
+            http: StubHTTPClient(.unauthorized()),
             limiter: unthrottled()
         )
         #expect(try await live.fetchUsage().failure == "Sign-in required")
+    }
+
+    @Test("provider-controlled error text never reaches a user-facing field")
+    func endpointTextStaysOutOfTheUI() async throws {
+        // The endpoint's error body is text we do not control, and the rail renders
+        // `failure` directly. Capturing it for diagnostics is useful; letting it through to
+        // the UI would hand a remote party the copy in a 185pt strip. It goes to metadata,
+        // which the UI does not render, and never to `failure`.
+        let hostile = "javascript:alert(1) — a very long remote-controlled string that would wreck the layout"
+        let provider = ClaudeUsageProvider(
+            credentials: StubClaudeCredentials.valid(),
+            http: StubHTTPClient(.unauthorized(detail: hostile)),
+            limiter: unthrottled()
+        )
+        let state = try await provider.fetchUsage()
+
+        #expect(state.failure == "Sign-in required")
+        #expect(state.failure?.contains("javascript") == false)
+        // Captured, but only where diagnostics look.
+        #expect(state.metadata["endpointDetail"] == hostile)
+    }
+
+    @Test("an overlong transport reason is clamped to something the rail can draw")
+    func transportReasonIsClamped() async throws {
+        // The transport path is the only one whose detail reaches user-facing copy. It is
+        // ours by construction today; the clamp makes that safe by type rather than by
+        // convention.
+        let sprawling = String(repeating: "connection failure ", count: 20)
+        let provider = ClaudeUsageProvider(
+            credentials: StubClaudeCredentials.valid(),
+            http: StubHTTPClient(.transport(detail: sprawling)),
+            limiter: unthrottled()
+        )
+        let state = try await provider.fetchUsage()
+
+        let failure = try #require(state.failure)
+        #expect(failure.count <= 32)
+        #expect(failure.hasSuffix("…"))
+    }
+
+    @Test("a short transport reason passes through unchanged")
+    func shortTransportReasonSurvives() async throws {
+        let provider = ClaudeUsageProvider(
+            credentials: StubClaudeCredentials.valid(),
+            http: StubHTTPClient(.transport(detail: "Offline")),
+            limiter: unthrottled()
+        )
+        #expect(try await provider.fetchUsage().failure == "Offline")
+    }
+
+    @Test("a rate-limit body is captured for diagnostics but not rendered")
+    func rateLimitDetailCaptured() async throws {
+        let provider = ClaudeUsageProvider(
+            credentials: StubClaudeCredentials.valid(),
+            http: StubHTTPClient(
+                .rateLimited(retryAfter: nil, detail: "rate_limit_error: Rate limited.")
+            ),
+            limiter: EndpointRateLimiter(minimumInterval: 0, initialBackoff: 300)
+        )
+        let state = try await provider.fetchUsage()
+
+        #expect(state.failure == "Rate limited")
+        #expect(state.metadata["endpointDetail"]?.contains("rate_limit_error") == true)
     }
 
     @Test("a rejection records which store the credential came from")
@@ -116,7 +179,7 @@ struct ClaudeProviderBehaviourTests {
         // "we read a superseded credential file", which need different fixes.
         let provider = ClaudeUsageProvider(
             credentials: StubClaudeCredentials.valid(),
-            http: StubHTTPClient(.unauthorized),
+            http: StubHTTPClient(.unauthorized()),
             limiter: unthrottled()
         )
         let state = try await provider.fetchUsage()
@@ -167,7 +230,7 @@ struct ClaudeProviderBehaviourTests {
         let limiter = EndpointRateLimiter(minimumInterval: 0, initialBackoff: 300)
         let provider = ClaudeUsageProvider(
             credentials: StubClaudeCredentials.valid(),
-            http: StubHTTPClient(.rateLimited(retryAfter: nil)),
+            http: StubHTTPClient(.rateLimited(retryAfter: nil, detail: nil)),
             limiter: limiter
         )
         let state = try await provider.fetchUsage()
@@ -183,7 +246,7 @@ struct ClaudeProviderBehaviourTests {
         // it here is what revokes the user's token family and signs them out of the CLI.
         let provider = ClaudeUsageProvider(
             credentials: StubClaudeCredentials.valid(),
-            http: StubHTTPClient(.unauthorized),
+            http: StubHTTPClient(.unauthorized()),
             limiter: unthrottled()
         )
         let state = try await provider.fetchUsage()
@@ -197,7 +260,7 @@ struct ClaudeProviderBehaviourTests {
     func serverErrorDegrades() async throws {
         let provider = ClaudeUsageProvider(
             credentials: StubClaudeCredentials.valid(),
-            http: StubHTTPClient(.http(status: 503)),
+            http: StubHTTPClient(.http(status: 503, detail: nil)),
             limiter: unthrottled()
         )
         let state = try await provider.fetchUsage()

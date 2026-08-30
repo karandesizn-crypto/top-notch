@@ -6,10 +6,55 @@ import Foundation
 /// status that must feed the backoff ladder instead of the error path.
 public enum HTTPOutcome: Sendable {
     case success(Data)
-    case unauthorized
-    case rateLimited(retryAfter: TimeInterval?)
-    case http(status: Int)
+    case unauthorized(detail: String? = nil)
+    case rateLimited(retryAfter: TimeInterval? = nil, detail: String? = nil)
+    case http(status: Int, detail: String? = nil)
     case transport(detail: String)
+}
+
+/// Pulls the machine-readable part out of a provider's error body.
+///
+/// A bare status code is not enough to act on. Anthropic returns 429 for a rate limit and
+/// 401 for a lapsed token, but it also returns those codes for reasons the `type` field
+/// distinguishes and the number does not — and while chasing a 401 on a live account, "is
+/// this an expired token or a rate limit wearing a different hat" was exactly the question
+/// that could not be answered from the status alone.
+///
+/// Only `error.type` is taken verbatim; the human message is truncated hard. Neither ever
+/// reaches user-facing copy — this goes to logs and diagnostics metadata only, because an
+/// error body is provider-controlled text and does not belong in the UI.
+enum HTTPErrorDetail {
+    static let messageLimit = 120
+
+    static func extract(from data: Data) -> String? {
+        guard
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        // Anthropic: {"error":{"type":"rate_limit_error","message":"..."}}
+        if let error = root["error"] as? [String: Any] {
+            let type = error["type"] as? String
+            let message = (error["message"] as? String).map(truncate)
+            return [type, message].compactMap { $0 }.joined(separator: ": ")
+                .nilIfEmpty
+        }
+        // Connect RPC: {"code":"unauthenticated","message":"..."}
+        if let code = root["code"] as? String {
+            let message = (root["message"] as? String).map(truncate)
+            return [code, message].compactMap { $0 }.joined(separator: ": ").nilIfEmpty
+        }
+        return nil
+    }
+
+    private static func truncate(_ text: String) -> String {
+        text.count <= messageLimit
+            ? text
+            : String(text.prefix(messageLimit)) + "…"
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 /// The seam that keeps the network out of unit tests.
@@ -84,12 +129,18 @@ public struct UsageHTTPClient: UsageHTTPPerforming {
             case 200...299:
                 return .success(data)
             case 401, 403:
-                return .unauthorized
+                return .unauthorized(detail: HTTPErrorDetail.extract(from: data))
             case 429:
                 let header = http.value(forHTTPHeaderField: "Retry-After")
-                return .rateLimited(retryAfter: header.flatMap(TimeInterval.init))
+                return .rateLimited(
+                    retryAfter: header.flatMap(TimeInterval.init),
+                    detail: HTTPErrorDetail.extract(from: data)
+                )
             default:
-                return .http(status: http.statusCode)
+                return .http(
+                    status: http.statusCode,
+                    detail: HTTPErrorDetail.extract(from: data)
+                )
             }
         } catch {
             // `localizedDescription` on a URLError names the host and the failure kind.
