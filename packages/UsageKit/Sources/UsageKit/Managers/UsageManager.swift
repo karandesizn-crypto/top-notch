@@ -301,7 +301,18 @@ public final class UsageManager {
             return
         }
 
-        let keepsPreviousFigures = state.status.isRetryable
+        // A provider can report "no figures" as an authoritative answer rather than a
+        // failure — Cursor does exactly this when the account has no metered pool: the
+        // request succeeded, and the truthful result is that nothing is metered. Papering
+        // that over with the last cached percentage would show a number the account no
+        // longer has, which is precisely the substitution the cache exists to prevent in
+        // the other direction.
+        //
+        // So a successful read always wins, even when what it found is nothing.
+        let readSucceeded = state.metadata["readSucceeded"] == "true"
+
+        let keepsPreviousFigures = !readSucceeded
+            && state.status.isRetryable
             && previous?.status == .available
         statuses[id]?.usage = keepsPreviousFigures ? (previous?.asCached() ?? state) : state
     }

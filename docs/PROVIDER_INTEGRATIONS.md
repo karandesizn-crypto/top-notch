@@ -188,6 +188,27 @@ is present, naming the keys it saw.
 - Same `Secret` handling and ephemeral session as Claude. No cookie header is ever set,
   and a test asserts that.
 
+### "No metered quota" is not a failure
+Both a successful-but-empty read and an integration failure leave the rail with nothing to
+draw, so the difference is carried in the state rather than only in the wording:
+
+| | successful, nothing metered | integration failure |
+|---|---|---|
+| `status` | `.unavailable` | `.unavailable` |
+| `failure` | "No metered quota" | "Sign in to Cursor", "Rate limited", … |
+| `metadata["outcome"]` | `noMeteredQuota` | absent |
+| `metadata["readSucceeded"]` | `"true"` | absent |
+| `lastUpdated` | set | set |
+
+`status` stays `.unavailable` because there is genuinely no measurement to draw — that is
+what the rail needs to know, and it keeps the locked visual treatment unchanged.
+
+This distinction has a consequence beyond labelling. `UsageManager` normally re-serves the
+last good figures as `.cached` when a retryable failure arrives, so a blip does not blank a
+number the user was reading. A successful read that found nothing must **not** be papered
+over that way — it would show a percentage the account no longer has. So a read marked
+`readSucceeded` always wins over the cache.
+
 ### Known limitations
 1. **The bearer endpoint describes the legacy request pool.** On an account using
    usage-based pricing every ceiling is `null`, so there is no percentage to show. The
@@ -214,10 +235,46 @@ Every one of these is enforced by a test in `ProviderKitTests`:
 | A refused read costs no request | `throttledReadMakesNoRequest` |
 | A 401 does not trigger a refresh | `unauthorizedDoesNotRefresh` |
 | Absence of data surfaces as absence | `unreadableProvidersHaveNoFigures` |
+| "No metered quota" is distinguishable from a failure | `noQuotaIsNotAFailure` |
+| A successful empty read is not masked by the cache | `authoritativeEmptyReadClearsFigures` |
+| A signed-out Cursor reads as signed out, not broken | `signedOutDatabase` |
+| A stale keychain item does not win over a fresh one | `picksFreshest` |
 | A stale stored expiry does not block the attempt | `staleExpiryStillAttempts` |
 
 No test opens a socket or touches the real keychain; both are injected seams. The suite
 runs in ~0.02s.
+
+## Live verification status
+
+| Provider | Status | Evidence |
+|---|---|---|
+| **Codex** | ✅ **Verified** | 30-day window, 0% used, plan "go", reset Sep 29 — re-confirmed after all Phase 4 refactoring |
+| **Cursor** | ✅ **Verified** | 200 from `api2.cursor.sh/auth/usage`, decoded, correctly reports "No metered quota" for this account |
+| **Claude** | ⏸ **Pending user action** | Credential read and authentication path confirmed; no 200 observed |
+
+### What Claude needs
+
+The login is healthy — `claude auth status` reports `loggedIn: true`, `authMethod:
+claude.ai`, `subscriptionType: pro`. What has lapsed is the *persisted* access token in the
+keychain, whose `expiresAt` is `2026-08-29T16:44:53Z`. Claude Code refreshes lazily and had
+not written a fresh one back.
+
+To produce fresh state, run:
+
+```
+claude auth login
+```
+
+That re-authenticates through Claude Code's own flow and rewrites the
+`Claude Code-credentials` keychain item. Nothing in SideNotch can do this, by design — the
+adapter never refreshes a token, which is the rule that prevents it revoking the user's
+CLI session.
+
+A second condition also has to clear: the usage endpoint is currently returning **429** to
+this machine after repeated verification runs, and it stays limited for a period with no
+`Retry-After` to negotiate against. Until that lapses, a 429 masks whatever the auth state
+is. Both conditions met, `swift run usage-probe` should show Claude's `five_hour` and
+`seven_day` windows with real percentages.
 
 ## Diagnostics
 

@@ -91,6 +91,34 @@ struct UsageManagerTests {
         #expect(status?.source == .cached)
     }
 
+    @Test("a successful read that finds nothing clears the figures, rather than hiding behind the cache")
+    func authoritativeEmptyReadClearsFigures() async {
+        // Cursor reports this when an account has no metered pool: the request succeeded,
+        // and the honest answer is that there is no percentage. It is retryable — the plan
+        // could change — but it is *not* a blip, so re-serving the last cached percentage
+        // would show a number the account no longer has.
+        let emptyButSuccessful = UsageState(
+            provider: .cursor,
+            status: .unavailable,
+            source: .unavailable,
+            lastUpdated: Date(),
+            failure: "No metered quota",
+            metadata: ["readSucceeded": "true", "outcome": "noMeteredQuota"]
+        )
+        let provider = ScriptedProvider(.cursor, answers: [
+            .success(reading(.cursor, percent: 62)),
+            .success(emptyButSuccessful),
+        ])
+        let manager = manager([provider])
+
+        await manager.refresh(.cursor)
+        await manager.refresh(.cursor)
+
+        let status = manager.status(for: .cursor)
+        #expect(status?.headlineWindow == nil)
+        #expect(status?.statusMessage == "No metered quota")
+    }
+
     @Test("a structural failure clears the figures")
     func unsupportedClearsFigures() async {
         let provider = ScriptedProvider(.claude, answers: [

@@ -121,6 +121,19 @@ enum CursorUsageDecoder {
 /// Maps a validated response into a `UsageState`.
 enum CursorUsageMapper {
 
+    /// What a *successful* read found, recorded in `metadata["outcome"]`.
+    ///
+    /// Exists so "we read your account and it has no metered limit" is never confused with
+    /// "we could not read your account". Both leave the rail with nothing to draw, and
+    /// without this the only thing separating them is the wording of a string sized for a
+    /// 185pt rail.
+    enum Outcome: String {
+        /// A ceiling was present and a percentage could be computed.
+        case metered
+        /// The read worked; the account has no metered pool. Not a failure.
+        case noMeteredQuota
+    }
+
     static func snapshot(
         from response: CursorUsageResponse,
         thresholds: UsageThresholds = .default,
@@ -168,10 +181,31 @@ enum CursorUsageMapper {
         // `.available` there would put a provider with no figures next to two that have
         // them, with nothing to explain the gap.
         guard windows.contains(where: { $0.usedFraction != nil }) else {
-            return UsageState.unavailable(
-                provider: .cursor, reason: "No metered quota", at: now
+            // Deliberately built with the full initializer rather than the `unavailable`
+            // factory, so this outcome is not merely *worded* differently from a failure
+            // but is distinguishable in the state itself.
+            //
+            // The read succeeded. There is simply nothing metered on this account — the
+            // ordinary case under usage-based pricing, where the endpoint answers 200 with
+            // every ceiling null. That is a fact about the plan, not a fault in the
+            // integration, and anything inspecting the state (diagnostics, notifications,
+            // a future settings screen) must be able to tell the two apart without
+            // string-matching user-facing copy.
+            //
+            // `status` stays `.unavailable` because there is no measurement to draw, which
+            // is what the rail needs to know; `outcome` carries the reason it is absent.
+            metadata["outcome"] = Outcome.noMeteredQuota.rawValue
+            metadata["readSucceeded"] = "true"
+            return UsageState(
+                provider: .cursor,
+                status: .unavailable,
+                source: .unavailable,
+                lastUpdated: now,
+                failure: "No metered quota",
+                metadata: metadata
             )
         }
+        metadata["outcome"] = Outcome.metered.rawValue
 
         return UsageState.live(
             provider: .cursor,

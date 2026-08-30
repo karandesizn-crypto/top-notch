@@ -22,8 +22,12 @@ import SideNotchCore
 /// - **It never refreshes the token.** `ClaudeOAuthCredential` does not even decode the
 ///   refresh token. Anthropic rotates refresh tokens and revokes the whole family when a
 ///   superseded one is presented, so a second refresher racing Claude Code can sign the
-///   user out of their CLI. On expiry this reports `authenticationRequired` and waits;
+///   user out of their CLI. When the endpoint rejects a token this reports it and waits;
 ///   Claude Code refreshes on its own next run and we read the new value.
+/// - **The stored expiry is advisory, not a gate.** Gating on it made this adapter answer
+///   "Sign-in expired" indefinitely on a machine whose keychain `expiresAt` had lapsed
+///   while the login was healthy. The endpoint decides; the stored claim only picks the
+///   wording when a request is actually refused.
 /// - **It re-reads the credential every fetch.** The keychain item is rotated
 ///   periodically, and a cached token would decay into a spurious auth error.
 /// - **It calls at most once per three minutes.** The endpoint rate-limits hard, sends no

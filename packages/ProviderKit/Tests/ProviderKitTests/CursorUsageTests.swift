@@ -1,4 +1,5 @@
 import Testing
+import SQLite3
 import Foundation
 import SideNotchCore
 @testable import ProviderKit
@@ -87,6 +88,45 @@ struct CursorUsageDecodingTests {
         #expect(snapshot.hasFigures == false)
         // Retryable: the account could gain a metered pool later.
         #expect(snapshot.status.isRetryable)
+        // And it is marked as a successful read, not a fault.
+        #expect(snapshot.metadata["outcome"] == "noMeteredQuota")
+        #expect(snapshot.metadata["readSucceeded"] == "true")
+        #expect(snapshot.lastUpdated != nil)
+    }
+
+    @Test("'no metered quota' is distinguishable from an integration failure in state alone")
+    func noQuotaIsNotAFailure() async throws {
+        // Both outcomes leave the rail with nothing to draw. Anything inspecting the state
+        // must be able to tell them apart without string-matching copy that is sized for a
+        // 185pt rail and will be reworded.
+        let noQuota = CursorUsageMapper.snapshot(
+            from: try CursorUsageDecoder.decode(fixture("cursor-usage-unmetered"))
+        )
+        let failed = try await CursorUsageProvider(
+            credentials: StubCursorCredentials.valid(),
+            http: StubHTTPClient(.unauthorized),
+            limiter: unthrottled()
+        ).fetchUsage()
+
+        // Same visual treatment...
+        #expect(noQuota.status == failed.status)
+        #expect(noQuota.hasFigures == failed.hasFigures)
+
+        // ...and yet unambiguously different facts.
+        #expect(noQuota.metadata["readSucceeded"] == "true")
+        #expect(failed.metadata["readSucceeded"] == nil)
+        #expect(noQuota.metadata["outcome"] == "noMeteredQuota")
+        #expect(failed.metadata["outcome"] == nil)
+        #expect(noQuota.failure != failed.failure)
+    }
+
+    @Test("a metered account is marked as such")
+    func meteredOutcomeRecorded() throws {
+        let snapshot = CursorUsageMapper.snapshot(
+            from: try CursorUsageDecoder.decode(fixture("cursor-usage-metered"))
+        )
+        #expect(snapshot.metadata["outcome"] == "metered")
+        #expect(snapshot.status == .available)
     }
 
     @Test("a renamed schema fails closed rather than reporting zero usage")
@@ -179,5 +219,38 @@ struct CursorCredentialTests {
         #expect(throws: ProviderError.notInstalled) {
             try source.read()
         }
+    }
+
+    @Test("a readable database with no token row reads as signed out, not as broken")
+    func signedOutDatabase() throws {
+        // Cursor installed but logged out. This used to surface as
+        // "Could not open Cursor state (sqlite 0)" — an alarming message about a file that
+        // had opened perfectly well, pointing the reader at the wrong problem entirely.
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let database = directory.appendingPathComponent("state.vscdb")
+        // A genuine, empty ItemTable — the shape Cursor leaves behind after a logout.
+        try makeEmptyItemTable(at: database)
+
+        let source = CursorCredentialSource(databaseURL: database)
+        #expect(throws: ProviderError.authenticationRequired) {
+            try source.read()
+        }
+    }
+
+    /// Creates a minimal `state.vscdb` with the real schema and no rows.
+    private func makeEmptyItemTable(at url: URL) throws {
+        var handle: OpaquePointer?
+        guard sqlite3_open_v2(
+            url.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil
+        ) == SQLITE_OK, let handle else {
+            throw ProviderError.unknown(detail: "could not create fixture database")
+        }
+        defer { sqlite3_close_v2(handle) }
+        sqlite3_exec(handle, "CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value BLOB);",
+                     nil, nil, nil)
     }
 }

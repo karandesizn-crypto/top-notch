@@ -91,6 +91,12 @@ public struct CursorCredentialSource: CursorCredentialReading {
         let candidates = ["file:\(escaped)?mode=ro", "file:\(escaped)?immutable=1"]
 
         var lastStatus: Int32 = SQLITE_OK
+        // Tracked separately because the two failures need different answers. Opening the
+        // database and finding no token means Cursor is signed out — the user can fix that.
+        // Failing to open it at all is our problem, not theirs, and saying "sqlite 0" when
+        // the file opened perfectly well just sends the reader down the wrong path.
+        var openedSuccessfully = false
+
         for uri in candidates {
             var handle: OpaquePointer?
             let status = sqlite3_open_v2(
@@ -102,6 +108,7 @@ public struct CursorCredentialSource: CursorCredentialReading {
                 continue
             }
             defer { sqlite3_close_v2(handle) }
+            openedSuccessfully = true
 
             // Busy timeout kept short: if Cursor is mid-checkpoint we would rather report
             // unavailable this cycle than sit on the handle.
@@ -110,6 +117,10 @@ public struct CursorCredentialSource: CursorCredentialReading {
             if let value = try? selectValue(handle: handle, key: tokenKey) {
                 return value
             }
+        }
+
+        if openedSuccessfully {
+            throw ProviderError.authenticationRequired
         }
         throw ProviderError.unknown(detail: "Could not open Cursor state (sqlite \(lastStatus))")
     }
