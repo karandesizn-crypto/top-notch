@@ -11,8 +11,17 @@ enum Tokens {
     enum Surface {
         /// Outward flare where the tab meets the chrome above it.
         static let flare: CGFloat = 10
-        static let collapsedRadius: CGFloat = 14
-        static let expandedRadius: CGFloat = 18
+        /// Bottom corners of the resting tab.
+        ///
+        /// Sized against the hardware rather than to taste. At 14 the tab read as a rounded
+        /// pill hanging under the notch; the notch's own corners are tighter than that, and
+        /// the mismatch is obvious precisely because the two shapes sit edge to edge. Swept
+        /// 14 / 10 / 8 / 6 against a render and 8 is where it stops reading as a pill and
+        /// starts reading as a continuation of the notch.
+        static let collapsedRadius: CGFloat = 8
+        /// Kept a few points above `collapsedRadius`, so expanding still softens the
+        /// corner slightly rather than jumping.
+        static let expandedRadius: CGFloat = 12
         /// Radius of the neck where the housing meets the panel.
         static let shoulderRadius: CGFloat = 10
 
