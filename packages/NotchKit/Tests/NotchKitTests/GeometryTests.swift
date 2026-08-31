@@ -186,6 +186,43 @@ struct NotchSurfaceLayoutTests {
         #expect(three.expandedSize(pinned: true).width == three.notchWidth)
     }
 
+    @Test("a hairline overflow snaps to the notch instead of showing as ears")
+    func hairlineFlareSnaps() {
+        // Five items need 186pt against a 185pt notch. Drawn literally, the panel overhangs
+        // the physical notch by half a point per side, and the shoulder curve spreads that
+        // over a ten-point drop into a visible ear at each lower corner.
+        let five = NotchSurfaceLayout(
+            providerCount: 4, notchWidth: 185, showsAddButton: true,
+            minimumChipWidth: 34, horizontalPadding: 8
+        )
+        #expect(five.collapsedSize.width == 185)
+    }
+
+    @Test("a flare wide enough to read as deliberate is kept")
+    func realFlareSurvives() {
+        // Legibility still wins once the chips genuinely need the room: this is the case
+        // the snap must not swallow.
+        let many = NotchSurfaceLayout(
+            providerCount: 7, notchWidth: 185, showsAddButton: true,
+            minimumChipWidth: 34, horizontalPadding: 8
+        )
+        // Eight items at 34pt plus 16pt of padding. Compared with a tolerance rather than
+        // `==`: the macro reports both sides as 288.0 and the equality as false, which is
+        // the same inline-arithmetic trap this suite has hit before.
+        let difference = abs(many.collapsedSize.width - 288)
+        #expect(difference < 0.0001)
+        #expect(many.collapsedSize.width > 185)
+    }
+
+    @Test("the panel never ends up narrower than the housing")
+    func neverNarrowerThanNotch() {
+        let few = NotchSurfaceLayout(
+            providerCount: 1, notchWidth: 185, showsAddButton: false,
+            minimumChipWidth: 34, horizontalPadding: 8
+        )
+        #expect(few.collapsedSize.width == 185)
+    }
+
     @Test("clicking grows the panel by a title plus one row per limit")
     func pinnedGrowsByRow() {
         let hover = three.expandedBodyHeight(pinned: false)

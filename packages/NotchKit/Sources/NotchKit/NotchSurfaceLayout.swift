@@ -80,14 +80,29 @@ public struct NotchSurfaceLayout: Sendable, Equatable {
         providerCount + (showsAddButton ? 1 : 0)
     }
 
+    /// A widening smaller than this is snapped away rather than drawn.
+    ///
+    /// The panel is allowed to grow past the housing when the chips would otherwise be
+    /// squeezed, and that flare reads as deliberate once it is wide enough to see. Below
+    /// that it does not: it overhangs the physical notch by a fraction of a point on each
+    /// side, and the shoulder curve spreads that fraction over a ten-point drop, turning a
+    /// single pixel of overflow into a small ear at the notch's lower corners — right where
+    /// the eye is already comparing the surface against the hardware.
+    ///
+    /// Found with four providers: five items need 186pt against a 185pt notch, so the panel
+    /// won by one point. Snapping costs each chip a fifth of a point.
+    public static let flareSnapThreshold: CGFloat = 6
+
     /// The resting panel: the housing's own size, exactly.
     ///
     /// It only grows past the housing's width when the chips would otherwise be squeezed
     /// below `minimumChipWidth` — past a certain number of tools, legibility wins over the
-    /// silhouette.
+    /// silhouette — and then only by an amount large enough to read as intended.
     public var collapsedSize: CGSize {
         let needed = CGFloat(itemCount) * minimumChipWidth + horizontalPadding * 2
-        return CGSize(width: max(notchWidth, needed), height: housingRowHeight)
+        let overflow = needed - notchWidth
+        let width = overflow > Self.flareSnapThreshold ? needed : notchWidth
+        return CGSize(width: max(width, notchWidth), height: housingRowHeight)
     }
 
     public var collapsedHeight: CGFloat { collapsedSize.height }
