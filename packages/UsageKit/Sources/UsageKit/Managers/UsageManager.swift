@@ -84,6 +84,17 @@ public final class UsageManager {
     /// Ticks so countdowns re-render without re-reading providers.
     public private(set) var now: Date = Date()
 
+    #if DEBUG
+    /// Pins the clock so offscreen renders reproduce exactly.
+    ///
+    /// Countdown text is derived from `now`, and the mock fixtures set their resets
+    /// relative to launch — so a golden render taken today and checked tomorrow disagreed
+    /// on "51m" versus "50m", and on the weekday name for the multi-day windows. A design
+    /// lock that cannot reproduce is not a lock; it is a nuisance that gets re-recorded
+    /// until it means nothing.
+    public func pinClockForRendering(_ date: Date) { now = date }
+    #endif
+
     /// Presentation order: the built-ins, then whatever the user added. Fixed, so chips
     /// never reshuffle under the pointer as readings arrive.
     public private(set) var order: [ProviderType] = []

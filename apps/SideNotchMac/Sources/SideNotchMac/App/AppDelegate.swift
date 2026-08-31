@@ -42,7 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if ProcessInfo.processInfo.environment["SIDENOTCH_MOCK"] == "1" {
             cache = InMemoryUsageCache()
-            providerOverride = MockUsageProvider.showcase()
+            // Fixed instant, matched by the render clock below, so fixture resets are the
+            // same distance away on every run.
+            providerOverride = MockUsageProvider.showcase(now: Self.renderClock)
         } else {
             cache = FileUsageCache()
             providerOverride = nil
@@ -92,6 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
     }
+
+    /// The instant every offscreen render pretends it is.
+    ///
+    /// Arbitrary but fixed: what matters is that the fixtures' resets and the countdown
+    /// that describes them are measured against the same clock, every time.
+    static let renderClock = Date(timeIntervalSince1970: 1_788_000_000)
 
     /// Ends any other copy of this app that is already running, so the newest launch wins.
     ///
@@ -263,6 +271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let path = environment["SIDENOTCH_RENDER"] {
             Task {
                 await manager.refreshAll()
+                // After the refresh, because refreshing stamps `now` with the wall clock.
+                manager.pinClockForRendering(Self.renderClock)
                 let focused = environment["SIDENOTCH_RENDER_FOCUS"]
                     .flatMap(ProviderType.init(rawValue:))
                 PreviewRenderer.render(
