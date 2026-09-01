@@ -78,8 +78,13 @@ public final class FileUsageCache: UsageCaching, @unchecked Sendable {
         var result: [ProviderType: UsageState] = [:]
         for (key, state) in entries {
             guard !Self.isExpired(state, now: now) else { continue }
-            // Marked on the way out, so a restored reading never presents as live.
-            result[ProviderType(key)] = state.asCached()
+            // Marked on the way out, so a restored reading never presents as live — and
+            // stripped of any window that has reset since it was written, because a warm
+            // start must not warm up with a figure describing a period that is over.
+            guard let surviving = state.asCached().droppingExpiredWindows(now: now) else {
+                continue
+            }
+            result[ProviderType(key)] = surviving
         }
         return result
     }

@@ -119,6 +119,59 @@ struct UsageManagerTests {
         #expect(status?.statusMessage == "No metered quota")
     }
 
+    @Test("a held-over figure is dropped once its own window has reset")
+    func heldFiguresExpireWithTheirWindow() async {
+        // The failure this was written for: a provider's token expires, every refresh
+        // fails, and the last good reading is carried forward indefinitely -- eventually
+        // describing a five-hour window that has rolled over many times, while looking
+        // entirely current.
+        let past = Date().addingTimeInterval(-3_600)
+        let expired = UsageState.live(
+            provider: .claude,
+            windows: [UsageWindow.fromPercentage(
+                id: "five_hour", label: "Session", percent: 24, resetDate: past
+            )]
+        )
+        let provider = ScriptedProvider(.claude, answers: [
+            .success(expired),
+            .failure(.authenticationRequired),
+        ])
+        let manager = manager([provider])
+
+        await manager.refresh(.claude)
+        await manager.refresh(.claude)
+
+        let status = manager.status(for: .claude)
+        // Nothing survives, so the failure it was papering over is what shows.
+        #expect(status?.headlineWindow == nil)
+        #expect(status?.status != .available)
+    }
+
+    @Test("a held-over figure survives while its window is still running")
+    func heldFiguresSurviveWithinTheirWindow() async {
+        // The other half: carrying a number through a blip is the entire point of this
+        // branch, and must keep working.
+        let future = Date().addingTimeInterval(3_600)
+        let live = UsageState.live(
+            provider: .claude,
+            windows: [UsageWindow.fromPercentage(
+                id: "five_hour", label: "Session", percent: 24, resetDate: future
+            )]
+        )
+        let provider = ScriptedProvider(.claude, answers: [
+            .success(live),
+            .failure(.notRunning),
+        ])
+        let manager = manager([provider])
+
+        await manager.refresh(.claude)
+        await manager.refresh(.claude)
+
+        let status = manager.status(for: .claude)
+        #expect(status?.headlineWindow?.usedPercentage.map { Int($0.rounded()) } == 24)
+        #expect(status?.source == .cached)
+    }
+
     @Test("a structural failure clears the figures")
     func unsupportedClearsFigures() async {
         let provider = ScriptedProvider(.claude, answers: [

@@ -151,6 +151,27 @@ public struct UsageState: Codable, Sendable, Identifiable, Equatable {
     /// "Am I about to be cut off?" is answered by whichever window bites first, which is
     /// not necessarily the session one — a nearly exhausted weekly quota matters more than
     /// a fresh 5-hour window.
+    /// The same reading with any window whose period has already reset removed.
+    ///
+    /// Used when a figure is held over because a refresh failed. Holding a number through a
+    /// blip is right; holding it past the reset of the window it describes is not, because
+    /// at that point it is a confident statement about a period that no longer exists. On a
+    /// real machine this showed a 24% session figure, twenty-three hours old, describing a
+    /// five-hour window that had rolled over four times since.
+    ///
+    /// Returns nil when nothing survives, so the caller can fall back to the failure it was
+    /// papering over rather than presenting an empty reading as a live one.
+    public func droppingExpiredWindows(now: Date = Date()) -> UsageState? {
+        let surviving = windows.filter { !$0.hasExpired(now: now) }
+        guard !surviving.isEmpty else { return nil }
+        guard surviving.count != windows.count else { return self }
+        return UsageState(
+            id: id, provider: provider, status: status, source: source,
+            lastUpdated: lastUpdated, failure: failure, plan: plan,
+            windows: surviving, credits: credits, metadata: metadata
+        )
+    }
+
     public var headlineWindow: UsageWindow? {
         windows.filter { $0.usedFraction != nil }
             .max { ($0.usedFraction ?? 0) < ($1.usedFraction ?? 0) }

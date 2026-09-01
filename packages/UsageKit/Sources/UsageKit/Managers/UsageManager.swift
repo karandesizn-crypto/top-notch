@@ -325,7 +325,27 @@ public final class UsageManager {
         let keepsPreviousFigures = !readSucceeded
             && state.status.isRetryable
             && previous?.status == .available
-        statuses[id]?.usage = keepsPreviousFigures ? (previous?.asCached() ?? state) : state
+
+        guard keepsPreviousFigures, let previous else {
+            statuses[id]?.usage = state
+            return
+        }
+
+        // Held-over figures survive only while the windows they describe still exist.
+        //
+        // Carrying a number through a blip is the point of this branch. Carrying it past
+        // the reset of its own window is not: the percentage becomes a confident claim
+        // about a period that has already rolled over, and nothing downstream can tell.
+        // Observed on a real machine — a 24% session figure, twenty-three hours old, for a
+        // five-hour window, shown as though it were current, because the provider's token
+        // had quietly expired and every refresh since had failed.
+        //
+        // When nothing survives, the failure this was papering over is the honest answer.
+        if let surviving = previous.asCached().droppingExpiredWindows(now: now) {
+            statuses[id]?.usage = surviving
+        } else {
+            statuses[id]?.usage = state
+        }
     }
 
     private static func state(for error: ProviderError, provider: ProviderType) -> UsageState {

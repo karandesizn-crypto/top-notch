@@ -32,6 +32,20 @@ public struct UsageWindow: Codable, Sendable, Identifiable, Equatable {
         self.level = level
     }
 
+    /// Whether the window this figure describes has already reset.
+    ///
+    /// A percentage is a statement about a specific window, and it stops being true the
+    /// moment that window rolls over. A live reading always resets in the future, so this
+    /// only ever fires on a figure that has been held over from an earlier read — which is
+    /// exactly when it stops meaning anything.
+    ///
+    /// A window with no stated reset cannot expire: nothing is known about when it rolls
+    /// over, and guessing would be worse than holding it.
+    public func hasExpired(now: Date = Date()) -> Bool {
+        guard let resetDate else { return false }
+        return resetDate <= now
+    }
+
     public var remainingFraction: Double? {
         usedFraction.map { 1 - $0 }
     }
